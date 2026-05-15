@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,700;0,900;1,400&family=JetBrains+Mono:wght@400;700&family=Playfair+Display:ital@1&display=swap');
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: "Playfair Display", serif;
+  
+  --color-background: #0A0A0A;
+  --color-surface-dim: #0A0A0A;
+  --color-surface-bright: #1A1A1A;
+  --color-surface-container-lowest: #000000;
+  --color-surface-container-low: #050505;
+  --color-surface-container: #0A0A0A;
+  --color-surface-container-high: #111111;
+  --color-surface-container-highest: #1A1A1A;
+  --color-on-surface: #FFFFFF;
+  --color-on-surface-variant: rgba(255, 255, 255, 0.9);
+  --color-outline: rgba(255, 255, 255, 0.2);
+  --color-outline-variant: rgba(255, 255, 255, 0.4);
+  --color-primary: #F0FF42;
+  --color-on-primary: #000000;
+  --color-primary-container: #F0FF42;
+  --color-on-primary-container: #000000;
+  --color-secondary: #FFFFFF;
+  --color-on-secondary: #000000;
+  --color-secondary-container: #222222;
+  --color-tertiary: #F0FF42;
+  
+  --radius-sm: 0px;
+  --radius-DEFAULT: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+
+  --spacing-gutter: 1.5rem;
+  --spacing-margin: 2rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface font-sans antialiased;
+  }
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.vertical-text {
+  writing-mode: vertical-rl;
+}
