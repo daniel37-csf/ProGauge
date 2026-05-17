@@ -1,6 +1,9 @@
-import { Shield, Lock, ArrowRight, Zap, Terminal, AlertTriangle } from 'lucide-react';
+import { Shield, Lock, ArrowRight, Zap, Terminal, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useState, FormEvent } from 'react';
 import { motion } from 'motion/react';
+import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface AdminLoginPageProps {
   onLogin: () => void;
@@ -11,14 +14,59 @@ export function AdminLoginPage({ onLogin, onBack }: AdminLoginPageProps) {
   const [adminToken, setAdminToken] = useState('');
   const [accessKey, setAccessKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    setError(null);
+    try {
+      // For the admin portal, we expect an email (token) and secret key (password)
+      const cleanToken = adminToken.trim().toLowerCase();
+      const { user } = await signInWithEmailAndPassword(auth, cleanToken, accessKey);
+      
+      // Verify admin status
+      const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+      const isMasterEmail = user.email?.toLowerCase() === 'drd3773@gmail.com';
+      
+      if (!adminDoc.exists() && !isMasterEmail) {
+        await auth.signOut();
+        throw new Error('ELEVATED_PRIVILEGES_REQUIRED: ACCESS_DENIED');
+      }
+      
+      // If we are bootstrapping the admin, we might want to create the doc
+      if (!adminDoc.exists() && isMasterEmail) {
+        const { setDoc, serverTimestamp } = await import('firebase/firestore');
+        try {
+          await setDoc(doc(db, 'admins', user.uid), {
+            userId: user.uid,
+            role: 'root',
+            email: user.email,
+            createdAt: serverTimestamp()
+          });
+        } catch (e) {
+          console.error("Failed to bootstrap admin doc:", e);
+          // We continue anyway since App.tsx and rules allow the email
+        }
+      }
+      
       onLogin();
-    }, 2000);
+    } catch (err: any) {
+      let displayError = err.message;
+      if (err.code === 'auth/operation-not-allowed') {
+        displayError = 'Authentication handshake failed: Email/Password login is not enabled in Firebase Console.';
+      } else if (err.code === 'auth/invalid-credential') {
+        displayError = 'ACCESS_DENIED: Invalid Admin_Terminal_ID or Master_Crypt_Key.';
+      } else if (err.code === 'auth/user-not-found') {
+        displayError = 'NODE_NOT_FOUND: This Admin_Terminal_ID does not exist.';
+      } else if (err.code === 'auth/wrong-password') {
+        displayError = 'CRYPT_KEY_REJECTED: Incorrect Master_Crypt_Key.';
+      }
+      setError(displayError);
+      handleFirestoreError(err, OperationType.GET, 'admins');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -64,6 +112,16 @@ export function AdminLoginPage({ onLogin, onBack }: AdminLoginPageProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="bg-red-500/10 border border-red-500/20 p-4 flex items-center gap-3 text-red-500 text-[10px] font-mono uppercase tracking-widest"
+            >
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
+            </motion.div>
+          )}
           <div className="relative group">
             <div className="absolute -top-3 left-6 px-2 bg-black text-[9px] font-mono text-red-500/60 uppercase tracking-widest z-20">Admin_Terminal_ID</div>
             <input 

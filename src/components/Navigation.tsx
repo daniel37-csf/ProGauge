@@ -9,9 +9,10 @@ interface HeaderProps {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
   onLogout: () => void;
+  isAdmin?: boolean;
 }
 
-export function Header({ activeTab, onTabChange, onLogout }: HeaderProps) {
+export function Header({ activeTab, onTabChange, onLogout, isAdmin }: HeaderProps) {
   const [showSettings, setShowSettings] = useState(false);
 
   return (
@@ -64,16 +65,18 @@ export function Header({ activeTab, onTabChange, onLogout }: HeaderProps) {
                     <span className="text-[10px] font-bold uppercase tracking-widest">Theme: Dark</span>
                     <div className="w-2 h-2 rounded-full bg-primary" />
                   </button>
-                  <button 
-                    onClick={() => {
-                      onTabChange('admin');
-                      setShowSettings(false);
-                    }}
-                    className="flex items-center justify-between p-4 hover:bg-primary hover:text-black transition-colors group border-t border-white/10"
-                  >
-                    <span className="text-[10px] font-bold uppercase tracking-widest">Admin Console</span>
-                    <Shield className="w-4 h-4 opacity-20 group-hover:opacity-100 transition-opacity" />
-                  </button>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => {
+                        onTabChange('admin');
+                        setShowSettings(false);
+                      }}
+                      className="flex items-center justify-between p-4 hover:bg-primary hover:text-black transition-colors group border-t border-white/10"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Admin Console</span>
+                      <Shield className="w-4 h-4 opacity-20 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  )}
                   <button 
                     onClick={onLogout}
                     className="flex items-center justify-between p-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white transition-all group border-t border-white/10"

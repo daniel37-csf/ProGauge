@@ -1,6 +1,9 @@
-import { Play, Shield, Lock, ArrowRight, Zap, Terminal, Gamepad2, Chrome, Apple } from 'lucide-react';
+import { Play, Shield, Lock, ArrowRight, Zap, Terminal, Gamepad2, Chrome, Apple, AlertCircle } from 'lucide-react';
 import { useState, FormEvent, ReactNode } from 'react';
 import { motion } from 'motion/react';
+import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { doc, getDoc, setDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -15,24 +18,125 @@ export function LoginPage({ onLogin, onAdminAccess }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate auth delay
-    setTimeout(() => {
-      setIsLoading(false);
+    setError(null);
+
+    try {
+      if (isRegistering) {
+        const cleanEmail = email.trim().toLowerCase();
+        const cleanUsername = username.trim();
+        
+        if (password.length < 6) {
+          throw new Error('Password must be at least 6 characters');
+        }
+        if (password !== confirmPassword) {
+          throw new Error('Passwords do not match');
+        }
+        if (cleanUsername.length < 3) {
+          throw new Error('Username must be at least 3 characters');
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
+          throw new Error('Username can only contain letters, numbers, and underscores');
+        }
+
+        const usernameRef = doc(db, 'usernames', cleanUsername.toLowerCase());
+        const usernameSnap = await getDoc(usernameRef);
+        if (usernameSnap.exists()) {
+          throw new Error('Username already exists');
+        }
+
+        const { user } = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'users', user.uid), {
+          email: user.email,
+          username: cleanUsername,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        batch.set(usernameRef, {
+          userId: user.uid
+        });
+        
+        await batch.commit();
+      } else {
+        if (!ident) throw new Error('Identification alias required');
+        let loginEmail = ident;
+        if (!ident.includes('@')) {
+          // Attempt username lookup
+          const usernameDoc = await getDoc(doc(db, 'usernames', ident.toLowerCase()));
+          if (usernameDoc.exists()) {
+            const userId = usernameDoc.data().userId;
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+              loginEmail = userDoc.data().email;
+            } else {
+              throw new Error('User terminal data missing');
+            }
+          } else {
+            throw new Error('Identification alias not found');
+          }
+        }
+        await signInWithEmailAndPassword(auth, loginEmail, password);
+      }
       onLogin();
-    }, 1500);
+    } catch (err: any) {
+      let displayError = err.message;
+      if (err.code === 'auth/operation-not-allowed') {
+        displayError = 'Authentication handshake failed: Email/Password login is not enabled in Firebase Console.';
+      } else if (err.code === 'auth/invalid-credential') {
+        displayError = 'Access Denied: Invalid identification or crypt key.';
+      } else if (err.code === 'auth/email-already-in-use') {
+        displayError = 'Terminal already registered for this email.';
+      } else if (err.code === 'auth/weak-password') {
+        displayError = 'Crypt key too weak. Use at least 6 characters.';
+      }
+      setError(displayError);
+      
+      // Determine more accurate path for error tracking
+      let errorPath = 'auth';
+      const user = auth.currentUser;
+      if (err.message.includes('Username')) errorPath = 'usernames';
+      else if (isRegistering && user) errorPath = `users/${user.uid}`;
+      
+      handleFirestoreError(err, isRegistering ? OperationType.WRITE : OperationType.GET, errorPath);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSocialLogin = (platform: string) => {
+  const handleSocialLogin = async (platform: string) => {
     setIsLoading(true);
-    console.log(`Initializing handshake with ${platform}...`);
-    setTimeout(() => {
-      setIsLoading(false);
+    setError(null);
+    try {
+      if (platform === 'Google') {
+        const { user } = await signInWithPopup(auth, googleProvider);
+        // Check if profile exists
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (!userDoc.exists()) {
+          // Auto-prompt or set default username
+          const baseUsername = user.displayName?.replace(/\s+/g, '_').toLowerCase() || 'agent_' + user.uid.slice(0, 5);
+          await setDoc(doc(db, 'users', user.uid), {
+            email: user.email,
+            username: baseUsername,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+          // Note: social login doesn't guarantee username uniqueness easily here without more checks
+        }
+      } else {
+        console.log(`Bridge to ${platform} not yet fully established.`);
+      }
       onLogin();
-    }, 1200);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -73,6 +177,16 @@ export function LoginPage({ onLogin, onAdminAccess }: LoginPageProps) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="bg-red-500/10 border border-red-500/20 p-4 flex items-center gap-3 text-red-500 text-[10px] font-mono uppercase tracking-widest"
+            >
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
+            </motion.div>
+          )}
           <div className="relative group">
             <input 
               required

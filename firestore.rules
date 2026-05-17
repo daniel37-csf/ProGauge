@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email.toLower() == "drd3773@gmail.com")
+      );
+    }
+
+    // Validation Blueprints
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'username', 'createdAt', 'updatedAt']) 
+        && data.keys().size() == 4
+        && data.email is string && data.email.size() <= 256
+        && data.username is string && data.username.size() >= 3 && data.username.size() <= 32
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['userId', 'role', 'email', 'createdAt'])
+        && data.keys().size() == 4
+        && data.userId is string && data.userId == request.auth.uid
+        && data.role in ['root', 'moderator']
+        && data.email is string && data.email == request.auth.token.email
+        && data.createdAt is timestamp;
+    }
+
+    function isValidUsernameMap(data) {
+      return data.keys().hasAll(['userId'])
+        && data.keys().size() == 1
+        && data.userId is string;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) 
+        && isValidId(userId)
+        && isValidUser(incoming())
+        // Relaxing email_verified for initial onboarding
+        && incoming().email == request.auth.token.email
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/usernames/$(incoming().username.toLower()));
+
+      allow update: if isOwner(userId)
+        && isValidUser(incoming())
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'updatedAt'])
+        && incoming().username == existing().username;
+    }
+
+    // Admins Collection
+    match /admins/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) 
+        && (request.auth.token.email.toLower() == "drd3773@gmail.com")
+        && isValidAdmin(incoming());
+      
+      allow update: if isAdmin() && isValidAdmin(incoming()) && incoming().role == existing().role;
+      allow delete: if false;
+    }
+
+    // Username Uniqueness Map
+    match /usernames/{username} {
+      allow get: if true; 
+      
+      allow create: if isSignedIn()
+        && isValidId(username)
+        && isValidUsernameMap(incoming())
+        && incoming().userId == request.auth.uid
+        && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid));
+
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

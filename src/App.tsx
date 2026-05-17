@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Header, BottomNav } from './components/Navigation';
 import { EventsPage } from './pages/EventsPage';
 import { LibraryPage } from './pages/LibraryPage';
@@ -13,6 +13,9 @@ import { AdminPage } from './pages/AdminPage';
 import { LoginPage } from './pages/LoginPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
 import { AnimatePresence, motion } from 'motion/react';
+import { auth, db } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 type Tab = 'events' | 'progress' | 'library' | 'alerts' | 'admin';
 type ViewState = 'login' | 'admin-login' | 'app';
@@ -20,8 +23,49 @@ type ViewState = 'login' | 'admin-login' | 'app';
 export default function App() {
   const [view, setView] = useState<ViewState>('login');
   const [activeTab, setActiveTab] = useState<Tab>('events');
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const currentView = useRef<ViewState>(view);
+  
+  useEffect(() => {
+    currentView.current = view;
+  }, [view]);
 
-  const handleLogout = () => {
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Check if admin
+        const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+        const isUserAdmin = adminDoc.exists() || user.email?.toLowerCase() === 'drd3773@gmail.com';
+        
+        if (isUserAdmin) {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
+
+        // If we were on the admin login page, and we successfully authenticated as admin
+        // automatically switch to the admin tab.
+        if (currentView.current === 'admin-login' && isUserAdmin) {
+          setActiveTab('admin');
+          setView('app');
+          setIsInitializing(false);
+          return;
+        }
+        
+        setView('app');
+      } else {
+        setView('login');
+        setIsAdmin(false);
+      }
+      setIsInitializing(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await signOut(auth);
     setView('login');
     setActiveTab('events');
   };
@@ -32,10 +76,24 @@ export default function App() {
       case 'library': return <LibraryPage />;
       case 'progress': return <ProgressPage />;
       case 'alerts': return <AlertsPage />;
-      case 'admin': return <AdminPage />;
+      case 'admin': return isAdmin ? <AdminPage /> : <EventsPage />;
       default: return <EventsPage />;
     }
   };
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <motion.div 
+          animate={{ opacity: [0.2, 1, 0.2] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          className="text-primary font-mono text-xs uppercase tracking-[1em]"
+        >
+          Initializing_Node_Sync...
+        </motion.div>
+      </div>
+    );
+  }
 
   if (view === 'login') {
     return (
@@ -60,7 +118,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background text-on-surface select-none font-sans overflow-x-hidden">
-      <Header activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} />
+      <Header 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab} 
+        onLogout={handleLogout} 
+        isAdmin={isAdmin}
+      />
       
       <main className="max-w-[1600px] mx-auto px-6 md:px-12 pt-32 pb-40 md:pt-48 md:pb-32">
         <AnimatePresence mode="wait">
