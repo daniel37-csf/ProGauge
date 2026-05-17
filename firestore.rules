@@ -30,16 +30,17 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (request.auth.token.email.toLower() == "drd3773@gmail.com")
+        (request.auth.token.get('email', '').toLower() == "drd3773@gmail.com")
       );
     }
 
     // Validation Blueprints
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'username', 'createdAt', 'updatedAt']) 
-        && data.keys().size() == 4
         && data.email is string && data.email.size() <= 256
         && data.username is string && data.username.size() >= 3 && data.username.size() <= 32
+        && (data.get('avatar', '') == '' || (data.avatar is string && data.avatar.size() <= 1024))
+        && (data.get('bio', '') == '' || (data.bio is string && data.bio.size() <= 1000))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -47,9 +48,9 @@ service cloud.firestore {
     function isValidAdmin(data) {
       return data.keys().hasAll(['userId', 'role', 'email', 'createdAt'])
         && data.keys().size() == 4
-        && data.userId is string && data.userId == request.auth.uid
+        && data.userId is string
         && data.role in ['root', 'moderator']
-        && data.email is string && data.email == request.auth.token.email
+        && data.email is string
         && data.createdAt is timestamp;
     }
 
@@ -78,8 +79,7 @@ service cloud.firestore {
         && incoming().email == existing().email
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'updatedAt'])
-        && incoming().username == existing().username;
+        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'avatar', 'bio', 'updatedAt']);
     }
 
     // Admins Collection
@@ -87,12 +87,11 @@ service cloud.firestore {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
       
-      allow create: if isOwner(userId) 
-        && (request.auth.token.email.toLower() == "drd3773@gmail.com")
-        && isValidAdmin(incoming());
+      allow create: if (isOwner(userId) && request.auth.token.get('email', '').toLower() == "drd3773@gmail.com" && isValidAdmin(incoming()) && incoming().userId == userId)
+                    || (isAdmin() && isValidAdmin(incoming()) && incoming().userId == userId);
       
-      allow update: if isAdmin() && isValidAdmin(incoming()) && incoming().role == existing().role;
-      allow delete: if false;
+      allow update: if isAdmin() && isValidAdmin(incoming()) && incoming().userId == userId;
+      allow delete: if isAdmin() && userId != request.auth.uid;
     }
 
     // Username Uniqueness Map

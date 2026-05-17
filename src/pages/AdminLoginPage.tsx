@@ -5,12 +5,10 @@ import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-interface AdminLoginPageProps {
-  onLogin: () => void;
-  onBack: () => void;
-}
+import { useNavigate } from 'react-router-dom';
 
-export function AdminLoginPage({ onLogin, onBack }: AdminLoginPageProps) {
+export function AdminLoginPage() {
+  const navigate = useNavigate();
   const [adminToken, setAdminToken] = useState('');
   const [accessKey, setAccessKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -22,14 +20,17 @@ export function AdminLoginPage({ onLogin, onBack }: AdminLoginPageProps) {
     setError(null);
     try {
       // For the admin portal, we expect an email (token) and secret key (password)
+      const masterEmail = 'drd3773@gmail.com';
       const cleanToken = adminToken.trim().toLowerCase();
       const { user } = await signInWithEmailAndPassword(auth, cleanToken, accessKey);
       
       // Verify admin status
       const adminDoc = await getDoc(doc(db, 'admins', user.uid));
-      const isMasterEmail = user.email?.toLowerCase() === 'drd3773@gmail.com';
+      const userEmail = user.email?.toLowerCase() || '';
+      const isMasterEmail = userEmail === masterEmail || cleanToken === masterEmail;
       
       if (!adminDoc.exists() && !isMasterEmail) {
+        console.warn(`Admin access denied. Current: ${userEmail}, Token: ${cleanToken}, Expected: ${masterEmail}`);
         await auth.signOut();
         throw new Error('ELEVATED_PRIVILEGES_REQUIRED: ACCESS_DENIED');
       }
@@ -41,16 +42,19 @@ export function AdminLoginPage({ onLogin, onBack }: AdminLoginPageProps) {
           await setDoc(doc(db, 'admins', user.uid), {
             userId: user.uid,
             role: 'root',
-            email: user.email,
+            email: userEmail || cleanToken,
             createdAt: serverTimestamp()
           });
-        } catch (e) {
+        } catch (e: any) {
           console.error("Failed to bootstrap admin doc:", e);
-          // We continue anyway since App.tsx and rules allow the email
+          // If the error was specifically permissions, we should report it
+          if (e.code === 'permission-denied') {
+             throw e;
+          }
         }
       }
       
-      onLogin();
+      navigate('/dashboard', { state: { fromAdminLogin: true } });
     } catch (err: any) {
       let displayError = err.message;
       if (err.code === 'auth/operation-not-allowed') {
@@ -167,7 +171,7 @@ export function AdminLoginPage({ onLogin, onBack }: AdminLoginPageProps) {
         </form>
 
         <button 
-          onClick={onBack}
+          onClick={() => navigate('/login')}
           className="mt-8 w-full py-4 text-[10px] font-bold uppercase tracking-[0.3em] text-white/20 hover:text-white transition-colors flex items-center justify-center gap-2"
         >
           <ArrowRight className="w-4 h-4 rotate-180" />

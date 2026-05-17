@@ -4,70 +4,37 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Header, BottomNav } from './components/Navigation';
 import { EventsPage } from './pages/EventsPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { ProgressPage } from './pages/ProgressPage';
 import { AlertsPage } from './pages/AlertsPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
 import { LoginPage } from './pages/LoginPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
+import { LandingPage } from './pages/LandingPage';
 import { AnimatePresence, motion } from 'motion/react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-type Tab = 'events' | 'progress' | 'library' | 'alerts' | 'admin';
-type ViewState = 'login' | 'admin-login' | 'app';
+type Tab = 'events' | 'progress' | 'library' | 'alerts' | 'profile' | 'admin';
 
-export default function App() {
-  const [view, setView] = useState<ViewState>('login');
-  const [activeTab, setActiveTab] = useState<Tab>('events');
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const currentView = useRef<ViewState>(view);
-  
-  useEffect(() => {
-    currentView.current = view;
-  }, [view]);
+function MainLayout({ isAdmin, activeTab, setActiveTab }: { isAdmin: boolean, activeTab: Tab, setActiveTab: (tab: Tab) => void }) {
+  const location = useLocation();
+  const navigatedRef = useRef(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // Check if admin
-        const adminDoc = await getDoc(doc(db, 'admins', user.uid));
-        const isUserAdmin = adminDoc.exists() || user.email?.toLowerCase() === 'drd3773@gmail.com';
-        
-        if (isUserAdmin) {
-          setIsAdmin(true);
-        } else {
-          setIsAdmin(false);
-        }
-
-        // If we were on the admin login page, and we successfully authenticated as admin
-        // automatically switch to the admin tab.
-        if (currentView.current === 'admin-login' && isUserAdmin) {
-          setActiveTab('admin');
-          setView('app');
-          setIsInitializing(false);
-          return;
-        }
-        
-        setView('app');
-      } else {
-        setView('login');
-        setIsAdmin(false);
-      }
-      setIsInitializing(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
+    if (location.state?.fromAdminLogin && !navigatedRef.current) {
+      setActiveTab('admin');
+      navigatedRef.current = true;
+    }
+  }, [location.state, setActiveTab]);
 
   const handleLogout = async () => {
     await signOut(auth);
-    setView('login');
-    setActiveTab('events');
   };
 
   const renderPage = () => {
@@ -76,45 +43,11 @@ export default function App() {
       case 'library': return <LibraryPage />;
       case 'progress': return <ProgressPage />;
       case 'alerts': return <AlertsPage />;
+      case 'profile': return <ProfilePage />;
       case 'admin': return isAdmin ? <AdminPage /> : <EventsPage />;
       default: return <EventsPage />;
     }
   };
-
-  if (isInitializing) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <motion.div 
-          animate={{ opacity: [0.2, 1, 0.2] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-          className="text-primary font-mono text-xs uppercase tracking-[1em]"
-        >
-          Initializing_Node_Sync...
-        </motion.div>
-      </div>
-    );
-  }
-
-  if (view === 'login') {
-    return (
-      <LoginPage 
-        onLogin={() => setView('app')} 
-        onAdminAccess={() => setView('admin-login')} 
-      />
-    );
-  }
-
-  if (view === 'admin-login') {
-    return (
-      <AdminLoginPage 
-        onLogin={() => {
-          setView('app');
-          setActiveTab('admin');
-        }} 
-        onBack={() => setView('login')} 
-      />
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background text-on-surface select-none font-sans overflow-x-hidden">
@@ -158,6 +91,79 @@ export default function App() {
       
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
+  );
+}
+
+export default function App() {
+  const [user, setUser] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>('events');
+  
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      if (authUser) {
+        setUser(authUser);
+        const adminDoc = await getDoc(doc(db, 'admins', authUser.uid));
+        const isUserAdmin = adminDoc.exists() || authUser.email?.toLowerCase() === 'drd3773@gmail.com';
+        setIsAdmin(isUserAdmin);
+      } else {
+        setUser(null);
+        setIsAdmin(false);
+      }
+      setIsInitializing(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <motion.div 
+          animate={{ opacity: [0.2, 1, 0.2] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          className="text-primary font-mono text-xs uppercase tracking-[1em]"
+        >
+          Initializing_Node_Sync...
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        
+        <Route 
+          path="/login" 
+          element={
+            user ? <Navigate to="/dashboard" replace /> : 
+            <LoginPage />
+          } 
+        />
+        
+        <Route 
+          path="/admin/login" 
+          element={
+            (user && isAdmin) ? <Navigate to="/dashboard" replace /> : 
+            <AdminLoginPage />
+          } 
+        />
+
+        <Route 
+          path="/dashboard" 
+          element={
+            user ? <MainLayout isAdmin={isAdmin} activeTab={activeTab} setActiveTab={setActiveTab} /> : 
+            <Navigate to="/login" replace />
+          } 
+        />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

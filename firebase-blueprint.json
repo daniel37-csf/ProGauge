@@ -7,6 +7,8 @@
       "properties": {
         "email": { "type": "string", "format": "email", "description": "User email address" },
         "username": { "type": "string", "description": "User alias/alias" },
+        "avatar": { "type": "string", "description": "User profile picture URL" },
+        "bio": { "type": "string", "description": "User tactical biography" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the user account was created" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp when the user account was last updated" }
       },

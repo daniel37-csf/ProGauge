@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
-type Tab = 'events' | 'progress' | 'library' | 'alerts' | 'admin';
+type Tab = 'events' | 'progress' | 'library' | 'alerts' | 'profile' | 'admin';
 
 interface HeaderProps {
   activeTab: Tab;
@@ -57,7 +57,13 @@ export function Header({ activeTab, onTabChange, onLogout, isAdmin }: HeaderProp
                   <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest">Configuration</span>
                 </div>
                 <div className="flex flex-col">
-                  <button className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors group">
+                  <button 
+                    onClick={() => {
+                      onTabChange('profile');
+                      setShowSettings(false);
+                    }}
+                    className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors group"
+                  >
                     <span className="text-[10px] font-bold uppercase tracking-widest">Profile Settings</span>
                     <ChevronDown className="w-4 h-4 -rotate-90 opacity-20 group-hover:opacity-100 transition-opacity" />
                   </button>

@@ -5,12 +5,10 @@ import { auth, db, googleProvider, handleFirestoreError, OperationType } from '.
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { doc, getDoc, setDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 
-interface LoginPageProps {
-  onLogin: () => void;
-  onAdminAccess: () => void;
-}
+import { useNavigate } from 'react-router-dom';
 
-export function LoginPage({ onLogin, onAdminAccess }: LoginPageProps) {
+export function LoginPage() {
+  const navigate = useNavigate();
   const [isRegistering, setIsRegistering] = useState(false);
   const [ident, setIdent] = useState(''); // Email or Username
   const [email, setEmail] = useState('');
@@ -83,7 +81,7 @@ export function LoginPage({ onLogin, onAdminAccess }: LoginPageProps) {
         }
         await signInWithEmailAndPassword(auth, loginEmail, password);
       }
-      onLogin();
+      navigate('/dashboard');
     } catch (err: any) {
       let displayError = err.message;
       if (err.code === 'auth/operation-not-allowed') {
@@ -131,7 +129,7 @@ export function LoginPage({ onLogin, onAdminAccess }: LoginPageProps) {
       } else {
         console.log(`Bridge to ${platform} not yet fully established.`);
       }
-      onLogin();
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -286,7 +284,7 @@ export function LoginPage({ onLogin, onAdminAccess }: LoginPageProps) {
           </button>
           
           <button 
-            onClick={onAdminAccess}
+            onClick={() => navigate('/admin/login')}
             className="text-[9px] font-mono text-white/20 hover:text-red-500 uppercase tracking-[0.5em] transition-colors mt-4 flex items-center gap-2"
           >
             <Shield className="w-3 h-3" />
