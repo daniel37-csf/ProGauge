@@ -1,8 +1,8 @@
 import React, { useState, FormEvent, useRef, useEffect } from 'react';
-import { auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { User, Shield, Key, Camera, Info, Save, ChevronRight, Binary, Globe, Clock, Activity, Lock, Mail, Monitor, X, Loader2 } from 'lucide-react';
+import { User, Shield, Key, Camera, Info, Save, ChevronRight, Binary, Globe, Clock, Activity, Lock, Mail, Monitor, X, Loader2, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useTheme } from '../components/ThemeProvider';
 
 interface SettingFieldProps {
   label: string;
@@ -16,7 +16,7 @@ interface SettingFieldProps {
 function SettingField({ label, value, onChange, type = 'text', placeholder, icon: Icon }: SettingFieldProps) {
   return (
     <div className="space-y-4 group">
-      <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 italic group-focus-within:text-primary transition-colors flex items-center gap-2">
+      <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/50 italic group-focus-within:text-primary transition-colors flex items-center gap-2">
         {Icon && <Icon className="w-3 h-3" />}
         {label}
       </label>
@@ -25,7 +25,7 @@ function SettingField({ label, value, onChange, type = 'text', placeholder, icon
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full bg-transparent border-b border-white/10 py-4 text-lg font-black uppercase tracking-tighter text-white placeholder:text-white/5 focus:outline-none focus:border-primary transition-all focus:pl-4"
+        className="w-full bg-transparent border-b border-outline py-4 text-lg font-black uppercase tracking-tighter text-on-surface placeholder:text-on-surface/20 focus:outline-none focus:border-primary transition-all focus:pl-4"
       />
     </div>
   );
@@ -33,9 +33,11 @@ function SettingField({ label, value, onChange, type = 'text', placeholder, icon
 
 interface ProfilePageProps {
   onAvatarUpdate?: (url: string) => void;
+  onLogout?: () => void;
 }
 
-export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
+export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
+  const { theme, setTheme } = useTheme();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
@@ -48,19 +50,26 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [accountAgeDays, setAccountAgeDays] = useState<number | string>('...');
+
   // Load user data
   useEffect(() => {
     const loadProfile = async () => {
-      const user = auth.currentUser;
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       setEmail(user.email || '');
+      
+      const createdAt = new Date(user.created_at);
+      const diffTime = Math.abs(new Date().getTime() - createdAt.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      setAccountAgeDays(diffDays);
 
       try {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .eq('id', user.uid)
+          .eq('id', user.id)
           .single();
 
         if (error) {
@@ -78,9 +87,9 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
         }
 
         if (data) {
-          setUsername(data.username || user.displayName || '');
+          setUsername(data.username || user.user_metadata?.username || '');
           setBio(data.bio || '');
-          const currentAvatar = data.avatar_url || user.photoURL || avatar;
+          const currentAvatar = data.avatar_url || user.user_metadata?.avatar_url || avatar;
           setAvatar(currentAvatar);
           if (onAvatarUpdate) onAvatarUpdate(currentAvatar);
         }
@@ -90,7 +99,7 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
     };
 
     loadProfile();
-  }, []);
+  }, [onAvatarUpdate, avatar]);
 
   const handleAvatarClick = () => {
     if (isUploading) return;
@@ -99,7 +108,7 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    const user = auth.currentUser;
+    const { data: { user } } = await supabase.auth.getUser();
     
     if (!file) return;
     if (!user) {
@@ -127,7 +136,7 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
       const fileExt = (file.name.split('.').pop() || 'png').replace(/[^a-z0-9]/gi, '').toLowerCase();
       // Use the standard folder-based path: {uid}/{timestamp}.{ext}
       // Most Supabase RLS policies for storage depend on the first folder being the user's UID.
-      const filePath = `${user.uid}/${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${Date.now()}.${fileExt}`;
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
@@ -163,7 +172,7 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
       const { error: updateError } = await supabase
         .from('profiles')
         .upsert({
-          id: user.uid,
+          id: user.id,
           avatar_url: publicUrl,
           updated_at: new Date().toISOString()
         }, { onConflict: 'id' });
@@ -186,7 +195,7 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
 
   const handleUpdateProfile = async (e: FormEvent) => {
     e.preventDefault();
-    const user = auth.currentUser;
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     setIsSaving(true);
@@ -194,7 +203,7 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
       const { error } = await supabase
         .from('profiles')
         .upsert({
-          id: user.uid,
+          id: user.id,
           username,
           bio,
           updated_at: new Date().toISOString()
@@ -211,18 +220,26 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
     }
   };
 
-  const handleUpdatePassword = (e: FormEvent) => {
+  const handleUpdatePassword = async (e: FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
       alert('Passwords do not match');
       return;
     }
-    // Simulate API call
-    alert('Password updated successfully');
-    setShowVault(false);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) {
+      alert(`Error updating password: ${error.message}`);
+    } else {
+      alert('Password updated successfully');
+      setShowVault(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    }
   };
 
   return (
@@ -245,8 +262,8 @@ export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
           </div>
           <div className="space-y-4">
             <p className="text-xs text-white/60 leading-relaxed">
-              The <code className="text-red-400">profiles</code> table does not exist in your Supabase database. 
-              Please run the following SQL in your <span className="text-white">Supabase SQL Editor</span> to initialize the schema:
+              The <code className="text-red-400">profiles</code> table is missing or missing columns in your Supabase database. 
+              Please run the following SQL in your <span className="text-white">Supabase SQL Editor</span> to initialize or update the schema:
             </p>
             <pre className="bg-black/50 p-6 text-[10px] font-mono text-primary/80 overflow-x-auto border border-white/5">
 {`-- Create profiles table
@@ -254,11 +271,18 @@ drop table if exists public.profiles;
 
 create table public.profiles (
   id text primary key, -- Supports Firebase UIDs
+  email text,
   username text,
   avatar_url text,
   bio text,
+  steam_id text,
+  is_admin boolean default false,
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
+
+-- If you already have the table, you can just add the missing columns:
+-- alter table public.profiles add column if not exists email text;
+-- alter table public.profiles add column if not exists is_admin boolean default false;
 
 -- Enable RLS
 alter table public.profiles enable row level security;
@@ -282,7 +306,7 @@ create policy "Anyone can update profile." on profiles for update using (true);`
         </div>
       )}
 
-      <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-8 border-b border-white/10 pb-12">
+      <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-8 border-b border-outline pb-12">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <User className="w-5 h-5 text-primary" />
@@ -295,19 +319,19 @@ create policy "Anyone can update profile." on profiles for update using (true);`
 
         <div className="flex gap-12">
           <div className="flex flex-col">
-            <span className="text-[8px] font-mono text-white/20 uppercase tracking-widest leading-none mb-2">Account Type</span>
+            <span className="text-[8px] font-mono text-on-surface/40 uppercase tracking-widest leading-none mb-2">Account Type</span>
             <span className="text-xl font-bold tracking-tighter italic">ADMIN</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[8px] font-mono text-white/20 uppercase tracking-widest leading-none mb-2">Status</span>
+            <span className="text-[8px] font-mono text-on-surface/40 uppercase tracking-widest leading-none mb-2">Status</span>
             <span className="text-xl font-bold tracking-tighter text-primary italic">ONLINE</span>
           </div>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-px bg-white/10 border border-white/10">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-px bg-on-surface/10 border border-outline">
         {/* Left Column: Avatar & Quick Actions */}
-        <section className="lg:col-span-4 bg-background p-12 space-y-12 border-b lg:border-b-0 lg:border-r border-white/10">
+        <section className="lg:col-span-4 bg-background p-12 space-y-12 border-b lg:border-b-0 lg:border-r border-outline">
            <div className="space-y-8">
               <div className="relative group mx-auto w-48 h-48 lg:w-full lg:h-64">
                  <input 
@@ -359,33 +383,33 @@ create policy "Anyone can update profile." on profiles for update using (true);`
               
               <div className="space-y-2 text-center lg:text-left">
                  <h2 className="text-3xl font-black uppercase tracking-tighter italic">{username}</h2>
-                 <p className="text-[10px] font-mono text-white/30 uppercase tracking-[0.2em]">User ID: #3773</p>
+                 <p className="text-[10px] font-mono text-on-surface/50 uppercase tracking-[0.2em]">User ID: #3773</p>
               </div>
            </div>
 
-           <div className="space-y-6 pt-12 border-t border-white/5">
+           <div className="space-y-6 pt-12 border-t border-outline">
               <button 
                 onClick={() => setShowVault(true)}
-                className="w-full py-5 border border-white/10 text-white/40 font-black uppercase tracking-[0.4em] text-[10px] hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-3 group"
+                className="w-full py-5 border border-outline text-on-surface/60 font-black uppercase tracking-[0.4em] text-[10px] hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-3 group"
               >
                  <Lock className="w-4 h-4" />
                  <span>Change Password</span>
                  <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </button>
               
-              <div className="p-6 bg-white/[0.02] border border-white/5 space-y-4">
+              <div className="p-6 bg-surface-bright border border-outline space-y-4">
                  <div className="flex items-center gap-2">
                     <Activity className="w-3 h-3 text-primary" />
-                    <span className="text-[8px] font-black uppercase tracking-widest text-white/40 italic">Account Activity</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-on-surface/60 italic">Account Activity</span>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                       <span className="text-[10px] font-bold">128H</span>
-                       <p className="text-[8px] font-mono text-white/20 uppercase">Total Time</p>
+                       <span className="text-[10px] font-bold">{accountAgeDays}D</span>
+                       <p className="text-[8px] font-mono text-on-surface/40 uppercase">Account Age</p>
                     </div>
                     <div className="space-y-1">
-                       <span className="text-[10px] font-bold">42</span>
-                       <p className="text-[8px] font-mono text-white/20 uppercase">Connected Devices</p>
+                       <span className="text-[10px] font-bold">1</span>
+                       <p className="text-[8px] font-mono text-on-surface/40 uppercase">Active Sessions</p>
                     </div>
                  </div>
               </div>
@@ -393,7 +417,7 @@ create policy "Anyone can update profile." on profiles for update using (true);`
         </section>
 
         {/* Right Column: Profile Form */}
-        <form onSubmit={handleUpdateProfile} className="lg:col-span-8 bg-black/20 p-12 lg:p-16 space-y-16">
+        <form onSubmit={handleUpdateProfile} className="lg:col-span-8 bg-surface-dim p-12 lg:p-16 space-y-16">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
               <SettingField 
                 label="Username"
@@ -413,43 +437,75 @@ create policy "Anyone can update profile." on profiles for update using (true);`
            </div>
 
            <div className="space-y-4 group">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 italic group-focus-within:text-primary transition-colors flex items-center gap-2">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/50 italic group-focus-within:text-primary transition-colors flex items-center gap-2">
                 <Binary className="w-3 h-3" />
                 Biography
               </label>
               <textarea 
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                className="w-full bg-transparent border-b border-white/10 py-4 text-sm font-mono text-white/80 placeholder:text-white/5 focus:outline-none focus:border-primary transition-all min-h-[100px] resize-none"
+                className="w-full bg-transparent border-b border-outline py-4 text-sm font-mono text-on-surface/80 placeholder:text-on-surface/20 focus:outline-none focus:border-primary transition-all min-h-[100px] resize-none"
               />
            </div>
 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-16 pt-8 border-t border-white/5">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-16 pt-8 border-t border-outline">
               <div className="space-y-6">
-                 <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 italic flex items-center gap-2">
+                 <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/50 italic flex items-center gap-2">
                     <Globe className="w-3 h-3" />
                     Region
                  </label>
-                 <select className="w-full bg-transparent border-b border-white/10 py-4 text-sm font-mono text-white/80 appearance-none focus:outline-none focus:border-white transition-colors cursor-pointer">
-                    <option className="bg-neutral-900">Asia</option>
-                    <option className="bg-neutral-900">North America</option>
-                    <option className="bg-neutral-900">Europe</option>
+                 <select className="w-full bg-transparent border-b border-outline py-4 text-sm font-mono text-on-surface/80 appearance-none focus:outline-none focus:border-on-surface transition-colors cursor-pointer">
+                    <option className="bg-background text-on-surface">Asia</option>
+                    <option className="bg-background text-on-surface">North America</option>
+                    <option className="bg-background text-on-surface">Europe</option>
                  </select>
               </div>
 
               <div className="space-y-6">
-                 <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 italic flex items-center gap-2">
+                 <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/50 italic flex items-center gap-2">
                     <Monitor className="w-3 h-3" />
                     Appearance
                  </label>
                  <div className="flex gap-4">
-                    <button type="button" className="flex-1 py-4 bg-white text-black text-[10px] font-black uppercase tracking-widest">Dark Mode</button>
-                    <button type="button" className="flex-1 py-4 border border-white/10 text-white/40 text-[10px] font-black uppercase tracking-widest hover:border-white hover:text-white transition-all">Light Mode</button>
+                    <button 
+                      type="button" 
+                      onClick={() => setTheme('dark')}
+                      className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${theme === 'dark' ? 'bg-on-surface text-background' : 'border border-outline text-on-surface/40 hover:border-on-surface hover:text-on-surface'}`}
+                    >
+                      Dark Mode
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => setTheme('light')}
+                      className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-on-surface text-background' : 'border border-outline text-on-surface/40 hover:border-on-surface hover:text-on-surface'}`}
+                    >
+                      Light Mode
+                    </button>
                  </div>
               </div>
            </div>
 
-           <div className="pt-12 flex justify-end">
+           <div className="pt-12 flex justify-between items-center border-t border-outline mt-16">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (onLogout) {
+                    onLogout();
+                  } else {
+                    try {
+                      await supabase.auth.signOut();
+                      window.location.href = '/login';
+                    } catch (e) {
+                      console.error('Logout error', e);
+                    }
+                  }
+                }}
+                className="py-4 px-8 border border-red-500/50 text-red-500 text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
+              >
+                 <LogOut className="w-4 h-4" />
+                 Sign Out
+              </button>
+
               <button 
                 type="submit"
                 disabled={isSaving}
@@ -483,14 +539,14 @@ create policy "Anyone can update profile." on profiles for update using (true);`
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className="w-full max-w-xl bg-neutral-900 border border-white/10 overflow-hidden"
+              className="w-full max-w-xl bg-background border border-outline overflow-hidden"
             >
-              <div className="p-8 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
+              <div className="p-8 border-b border-outline flex justify-between items-center bg-surface-bright">
                  <div className="flex items-center gap-4 text-primary">
                     <Shield className="w-5 h-5" />
                     <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Security Settings</h3>
                  </div>
-                 <button onClick={() => setShowVault(false)} className="text-white/20 hover:text-white transition-colors">
+                 <button onClick={() => setShowVault(false)} className="text-on-surface/40 hover:text-on-surface transition-colors">
                     <X className="w-5 h-5" />
                  </button>
               </div>
@@ -529,13 +585,13 @@ create policy "Anyone can update profile." on profiles for update using (true);`
                     <button 
                       type="button"
                       onClick={() => setShowVault(false)}
-                      className="py-5 border border-white/10 text-white/40 font-black uppercase tracking-[0.4em] text-[10px] hover:text-white hover:border-white transition-all"
+                      className="py-5 border border-outline text-on-surface/50 font-black uppercase tracking-[0.4em] text-[10px] hover:text-on-surface hover:border-on-surface transition-all"
                     >
                        Cancel
                     </button>
                     <button 
                       type="submit"
-                      className="py-5 bg-white text-black font-black uppercase tracking-[0.4em] text-[10px] hover:bg-primary transition-all"
+                      className="py-5 bg-on-surface text-background font-black uppercase tracking-[0.4em] text-[10px] hover:bg-primary transition-all"
                     >
                        Update Password
                     </button>
@@ -546,12 +602,12 @@ create policy "Anyone can update profile." on profiles for update using (true);`
         )}
       </AnimatePresence>
 
-      <footer className="pt-20 border-t border-white/5 flex flex-col items-center gap-6">
-         <div className="flex items-center gap-4 text-[10px] font-mono text-white/20 uppercase tracking-[0.2em]">
+      <footer className="pt-20 border-t border-outline flex flex-col items-center gap-6">
+         <div className="flex items-center gap-4 text-[10px] font-mono text-on-surface/40 uppercase tracking-[0.2em]">
             <span>System Status: Online</span>
-            <div className="w-[1px] h-4 bg-white/10" />
+            <div className="w-[1px] h-4 bg-outline" />
             <span>Verified</span>
-            <div className="w-[1px] h-4 bg-white/10" />
+            <div className="w-[1px] h-4 bg-outline" />
             <span>Secure Connection</span>
          </div>
       </footer>

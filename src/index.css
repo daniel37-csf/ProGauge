@@ -6,25 +6,25 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-serif: "Playfair Display", serif;
   
-  --color-background: #0A0A0A;
-  --color-surface-dim: #0A0A0A;
-  --color-surface-bright: #1A1A1A;
-  --color-surface-container-lowest: #000000;
-  --color-surface-container-low: #050505;
-  --color-surface-container: #0A0A0A;
-  --color-surface-container-high: #111111;
-  --color-surface-container-highest: #1A1A1A;
-  --color-on-surface: #FFFFFF;
-  --color-on-surface-variant: rgba(255, 255, 255, 0.9);
-  --color-outline: rgba(255, 255, 255, 0.2);
-  --color-outline-variant: rgba(255, 255, 255, 0.4);
+  --color-background: var(--bg-base);
+  --color-surface-dim: var(--bg-dim);
+  --color-surface-bright: var(--bg-bright);
+  --color-surface-container-lowest: var(--bg-lowest);
+  --color-surface-container-low: var(--bg-low);
+  --color-surface-container: var(--bg-container);
+  --color-surface-container-high: var(--bg-high);
+  --color-surface-container-highest: var(--bg-highest);
+  --color-on-surface: var(--fg-base);
+  --color-on-surface-variant: var(--fg-variant);
+  --color-outline: var(--outline-base);
+  --color-outline-variant: var(--outline-variant);
   --color-primary: #F0FF42;
   --color-on-primary: #000000;
   --color-primary-container: #F0FF42;
   --color-on-primary-container: #000000;
-  --color-secondary: #FFFFFF;
-  --color-on-secondary: #000000;
-  --color-secondary-container: #222222;
+  --color-secondary: var(--color-sec);
+  --color-on-secondary: var(--color-on-sec);
+  --color-secondary-container: var(--color-sec-container);
   --color-tertiary: #F0FF42;
   
   --radius-sm: 0px;
@@ -39,6 +39,44 @@
   @keyframes carousel {
     0% { transform: translateX(0); }
     100% { transform: translateX(-50%); }
+  }
+}
+
+@layer base {
+  :root {
+    --bg-base: #FFFFFF;
+    --bg-dim: #F5F5F5;
+    --bg-bright: #FFFFFF;
+    --bg-lowest: #FFFFFF;
+    --bg-low: #F0F0F0;
+    --bg-container: #FAFAFA;
+    --bg-high: #E5E5E5;
+    --bg-highest: #D4D4D4;
+    --fg-base: #000000;
+    --fg-variant: rgba(0, 0, 0, 0.9);
+    --outline-base: rgba(0, 0, 0, 0.2);
+    --outline-variant: rgba(0, 0, 0, 0.4);
+    --color-sec: #000000;
+    --color-on-sec: #FFFFFF;
+    --color-sec-container: #E0E0E0;
+  }
+
+  .dark {
+    --bg-base: #0A0A0A;
+    --bg-dim: #0A0A0A;
+    --bg-bright: #1A1A1A;
+    --bg-lowest: #000000;
+    --bg-low: #050505;
+    --bg-container: #0A0A0A;
+    --bg-high: #111111;
+    --bg-highest: #1A1A1A;
+    --fg-base: #FFFFFF;
+    --fg-variant: rgba(255, 255, 255, 0.9);
+    --outline-base: rgba(255, 255, 255, 0.2);
+    --outline-variant: rgba(255, 255, 255, 0.4);
+    --color-sec: #FFFFFF;
+    --color-on-sec: #000000;
+    --color-sec-container: #222222;
   }
 }
 

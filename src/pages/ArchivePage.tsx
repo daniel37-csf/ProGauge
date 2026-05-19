@@ -91,7 +91,9 @@ export function ArchivePage({ onBack }: { onBack: () => void }) {
       <div className="grid grid-cols-1 gap-12">
         {filteredData.length > 0 ? (
           filteredData.map((item, index) => (
-            <ArchiveRow key={item.id} item={item} index={index} />
+            <div key={item.id}>
+              <ArchiveRow item={item} index={index} />
+            </div>
           ))
         ) : (
           <div className="py-32 flex flex-col items-center justify-center grayscale opacity-20 space-y-6">

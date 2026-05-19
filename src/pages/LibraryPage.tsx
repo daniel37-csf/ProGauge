@@ -1,6 +1,7 @@
-import { Search, Heart, Clock, RefreshCw, Download, Play, ArrowRight, Zap, X, ChevronRight, Shield, Cpu, Activity, Globe } from 'lucide-react';
+import { Search, Heart, Clock, RefreshCw, Download, Play, ArrowRight, Zap, X, ChevronRight, Shield, Cpu, Activity, Globe, ExternalLink, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface RelatedGame {
   id: string;
@@ -12,7 +13,7 @@ interface GameNode {
   id: string;
   title: string;
   image: string;
-  status: 'INSTALLED' | 'AVAILABLE';
+  status: 'INSTALLED' | 'AVAILABLE' | 'STEAM_CLOUD';
   hours: string;
   lastPlayed: string;
   liked: boolean;
@@ -25,6 +26,12 @@ interface GameNode {
   genre: string;
   platforms: string[];
   fullSynopsis: string;
+  appId?: string; // Steam App ID
+  achievementProgress?: {
+    completed: number;
+    total: number;
+    percentage: number;
+  };
   steamMetadata?: {
     userReview: string;
     criticScore: number;
@@ -145,7 +152,137 @@ const LIBRARY_NODES: GameNode[] = [
 
 export function LibraryPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const selectedNode = LIBRARY_NODES.find(n => n.id === selectedNodeId);
+  const [steamGames, setSteamGames] = useState<GameNode[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [steamId, setSteamId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'local' | 'steam' | 'favorites'>('all');
+  const [showSteamInput, setShowSteamInput] = useState(false);
+  const [manualSteamId, setManualSteamId] = useState('');
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('steam_id')
+          .eq('id', user.id)
+          .single();
+        
+        if (!error && data?.steam_id) {
+          setSteamId(data.steam_id);
+        }
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  const syncSteamLibrary = async (idToUse?: string) => {
+    const id = idToUse || steamId;
+    if (!id) return;
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const response = await fetch(`/api/steam/games?steamId=${id}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Connection to Steam API failed');
+      }
+
+      const data = await response.json();
+
+      if (data.games) {
+        const mappedGames: GameNode[] = data.games.map((g: any) => ({
+          id: `steam-${g.appid}`,
+          appId: g.appid.toString(),
+          title: g.name,
+          image: `https://cdn.akamai.steamstatic.com/steam/apps/${g.appid}/library_600x900.jpg`,
+          status: 'STEAM_CLOUD',
+          hours: `${Math.round(g.playtime_forever / 60)} hrs`,
+          lastPlayed: g.playtime_2weeks ? `${Math.round(g.playtime_2weeks / 60)}h recent` : 'Idle',
+          liked: false,
+          action: 'PLAY',
+          description: `Steam Library Entry: ${g.name}. Synchronized via global terminal.`,
+          developer: 'N/A',
+          publisher: 'N/A',
+          releaseDate: 'N/A',
+          genre: 'Steam Game',
+          platforms: ['Steam'],
+          fullSynopsis: `Remote record of ${g.name}. Access available via the Steam Protocol. Achievement tracking and playtime metrics are active for this node.`,
+          specs: [{ label: 'Source', value: 'Steam Cloud' }],
+          recommendedSpecs: [],
+          relatedGames: []
+        }));
+        setSteamGames(mappedGames);
+        setShowSteamInput(false);
+        
+        // Save to profile if manual ID was used
+        if (idToUse) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase
+              .from('profiles')
+              .upsert({
+                id: user.id,
+                steam_id: idToUse,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'id' });
+          }
+          setSteamId(idToUse);
+        }
+      } else {
+        setSyncError('No games found. Is your library private?');
+      }
+    } catch (err: any) {
+      console.error('Steam Sync Failed:', err);
+      setSyncError(err.message || 'Synchronization failed');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const filteredGames = [...LIBRARY_NODES, ...steamGames].filter(game => {
+    const matchesSearch = game.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = 
+      activeFilter === 'all' ? true :
+      activeFilter === 'local' ? game.status === 'INSTALLED' :
+      activeFilter === 'steam' ? game.status === 'STEAM_CLOUD' :
+      activeFilter === 'favorites' ? game.liked : true;
+    return matchesSearch && matchesFilter;
+  });
+
+  const selectedNode = [...LIBRARY_NODES, ...steamGames].find(n => n.id === selectedNodeId);
+
+  // Fetch achievements for selected node if it's a Steam game
+  useEffect(() => {
+    if (selectedNode?.appId && (steamId || manualSteamId) && !selectedNode.achievementProgress) {
+      const fetchAchievements = async () => {
+        try {
+          const id = steamId || manualSteamId;
+          const res = await fetch(`/api/steam/achievements?steamId=${id}&appId=${selectedNode.appId}`);
+          const data = await res.json();
+          if (data.achievements) {
+            const completed = data.achievements.filter((a: any) => a.achieved === 1).length;
+            const total = data.achievements.length;
+            const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+            
+            const updatedGames = steamGames.map(g => 
+              g.appId === selectedNode.appId 
+                ? { ...g, achievementProgress: { completed, total, percentage } }
+                : g
+            );
+            setSteamGames(updatedGames);
+          }
+        } catch (err) {
+          console.error('Achievement Sycn Failed:', err);
+        }
+      };
+      fetchAchievements();
+    }
+  }, [selectedNodeId, steamId, manualSteamId]);
 
   return (
     <div className="space-y-xl animate-in fade-in duration-700 pb-12">
@@ -164,16 +301,77 @@ export function LibraryPage() {
                 <Search className="absolute left-0 top-1/2 -translate-y-1/2 text-primary w-5 h-5 group-focus-within:scale-125 transition-transform" />
                 <input 
                   type="text" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search Games..." 
                   className="w-full bg-transparent py-4 pl-10 pr-4 text-white font-black uppercase tracking-widest focus:outline-none placeholder:text-white/20"
                 />
               </div>
 
-              <div className="flex flex-wrap gap-4 scrollbar-hide">
-                <FilterChip label="All Games" active />
-                <FilterChip label="Local" />
-                <FilterChip label="Favorites" />
-                <FilterChip label="Recent" />
+              <div className="flex flex-wrap gap-4 scrollbar-hide items-center justify-between w-full">
+                <div className="flex gap-4">
+                  <FilterChip label="All Games" active={activeFilter === 'all'} onClick={() => setActiveFilter('all')} />
+                  <FilterChip label="Local" active={activeFilter === 'local'} onClick={() => setActiveFilter('local')} />
+                  <FilterChip label="Favorites" active={activeFilter === 'favorites'} onClick={() => setActiveFilter('favorites')} />
+                  <FilterChip label="Steam Cloud" active={activeFilter === 'steam'} onClick={() => setActiveFilter('steam')} />
+                </div>
+                
+                {steamId ? (
+                  <div className="flex items-center gap-4">
+                    {syncError && <span className="text-[9px] text-red-500 font-mono animate-pulse">{syncError}</span>}
+                    <button 
+                      disabled={isSyncing}
+                      onClick={() => syncSteamLibrary()}
+                      className="flex items-center gap-3 px-6 py-2 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest hover:bg-primary/10 transition-all disabled:opacity-50"
+                    >
+                      {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                      <span>{isSyncing ? 'Synchronizing...' : 'Sync Steam Library'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-4">
+                    {showSteamInput ? (
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-2 animate-in slide-in-from-right-4">
+                          <input 
+                            type="text"
+                            value={manualSteamId}
+                            onChange={(e) => setManualSteamId(e.target.value)}
+                            placeholder="17-DIGIT STEAM ID"
+                            className="bg-white/5 border border-white/10 px-4 py-2 text-[10px] font-mono focus:outline-none focus:border-primary transition-colors text-white w-48"
+                          />
+                          <button 
+                            onClick={() => syncSteamLibrary(manualSteamId)}
+                            disabled={isSyncing || !manualSteamId}
+                            className="px-4 py-2 bg-primary text-black text-[10px] font-black uppercase hover:bg-white transition-colors disabled:opacity-50"
+                          >
+                            {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Sync'}
+                          </button>
+                          <button onClick={() => setShowSteamInput(false)} className="p-2 text-white/40 hover:text-white"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="flex gap-4">
+                          {syncError && <span className="text-[9px] text-red-500 font-mono">{syncError}</span>}
+                          <a 
+                            href="https://steamidfinder.com/" 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="text-[8px] text-white/20 hover:text-primary transition-colors font-mono uppercase tracking-widest"
+                          >
+                            Find my Steam ID →
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={() => setShowSteamInput(true)}
+                        className="flex items-center gap-3 px-6 py-2 border border-white/10 text-white/40 text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary transition-all"
+                      >
+                        <Globe className="w-3 h-3" />
+                        <span>Link Steam ID</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
 
@@ -225,7 +423,7 @@ export function LibraryPage() {
 
             {/* Game List Grid */}
             <div className="grid grid-cols-1 gap-px bg-white/10 border border-white/10">
-              {LIBRARY_NODES.map(node => (
+              {filteredGames.map(node => (
                 <GameRow 
                   key={node.id}
                   title={node.title}
@@ -238,10 +436,18 @@ export function LibraryPage() {
                   onClick={() => setSelectedNodeId(node.id)}
                 />
               ))}
-              <div className="bg-primary p-12 flex flex-col justify-center items-center text-black cursor-pointer group hover:bg-white transition-colors">
-                <RefreshCw className="w-12 h-12 mb-4 group-hover:rotate-180 transition-transform duration-500" />
-                <span className="text-[10px] font-black uppercase tracking-[0.3em]">Load More</span>
-              </div>
+              {filteredGames.length < (LIBRARY_NODES.length + steamGames.length) && (
+                <div className="bg-primary p-12 flex flex-col justify-center items-center text-black cursor-pointer group hover:bg-white transition-colors">
+                  <RefreshCw className="w-12 h-12 mb-4 group-hover:rotate-180 transition-transform duration-500" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.3em]">Load More</span>
+                </div>
+              )}
+              {filteredGames.length === 0 && (
+                <div className="py-32 flex flex-col items-center justify-center opacity-20 space-y-6">
+                  <Search className="w-16 h-16" />
+                  <span className="text-sm font-black uppercase tracking-[0.4em]">No matches found in grid</span>
+                </div>
+              )}
             </div>
           </motion.div>
         ) : (
@@ -275,8 +481,12 @@ export function LibraryPage() {
             <div className="flex-grow">
               {/* Hero Section */}
               <div className="grid grid-cols-1 lg:grid-cols-12 border-b border-white/10">
-                <div className="lg:col-span-5 relative h-[400px] lg:h-[600px] overflow-hidden grayscale group border-r border-white/10">
-                   <img src={selectedNode?.image} className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-[10s] ease-out" alt="" />
+                <div className="lg:col-span-5 relative h-[400px] lg:h-[600px] overflow-hidden group border-r border-white/10">
+                   <img 
+                    src={selectedNode?.appId ? `https://cdn.akamai.steamstatic.com/steam/apps/${selectedNode.appId}/header.jpg` : selectedNode?.image} 
+                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-[10s] ease-out" 
+                    alt="" 
+                   />
                    <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
                    <div className="absolute bottom-12 left-12 right-12">
                       <div className="flex items-center gap-4 mb-4">
@@ -322,15 +532,34 @@ export function LibraryPage() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-4 mt-20">
-                     <button className="flex-[2] py-6 bg-white text-black font-black uppercase tracking-[0.4em] text-[12px] hover:bg-primary transition-all flex items-center justify-center gap-4 relative overflow-hidden group">
-                        <div className="absolute inset-0 bg-primary/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
-                        <Play className="w-5 h-5 fill-current" />
-                        <span>{selectedNode?.action === 'Play' ? 'Play Game' : 'Install Game'}</span>
-                     </button>
-                     <button className="flex-1 py-6 border border-white/10 text-white/40 font-black uppercase tracking-[0.4em] text-[11px] hover:border-white hover:text-white transition-all flex items-center justify-center gap-3">
-                        <Cpu className="w-4 h-4" />
-                        Diagnostics
-                     </button>
+                     {selectedNode?.appId ? (
+                       <a 
+                         href={`steam://run/${selectedNode.appId}`}
+                         className="flex-[2] py-6 bg-white text-black font-black uppercase tracking-[0.4em] text-[12px] hover:bg-primary transition-all flex items-center justify-center gap-4 relative overflow-hidden group"
+                       >
+                          <div className="absolute inset-0 bg-primary/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+                          <Play className="w-5 h-5 fill-current" />
+                          <span>Launch Protocol</span>
+                       </a>
+                     ) : (
+                       <button className="flex-[2] py-6 bg-white text-black font-black uppercase tracking-[0.4em] text-[12px] hover:bg-primary transition-all flex items-center justify-center gap-4 relative overflow-hidden group">
+                          <div className="absolute inset-0 bg-primary/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+                          <Play className="w-5 h-5 fill-current" />
+                          <span>{selectedNode?.action === 'Play' ? 'Play Game' : 'Install Game'}</span>
+                       </button>
+                     )}
+                     
+                     {selectedNode?.appId && (
+                       <a 
+                          href={`https://store.steampowered.com/app/${selectedNode.appId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 py-6 border border-white/10 text-white/40 font-black uppercase tracking-[0.4em] text-[11px] hover:border-white hover:text-white transition-all flex items-center justify-center gap-3"
+                       >
+                          <ExternalLink className="w-4 h-4" />
+                          Store Page
+                       </a>
+                     )}
                   </div>
                 </div>
               </div>
@@ -341,35 +570,59 @@ export function LibraryPage() {
                    <div className="flex items-center justify-between mb-12">
                       <div className="flex items-center gap-4">
                          <div className="w-2 h-8 bg-primary" />
-                         <h3 className="text-2xl font-black uppercase tracking-widest italic">System Requirements</h3>
+                         <h3 className="text-2xl font-black uppercase tracking-widest italic">
+                            {selectedNode?.appId ? 'Steam Metrics' : 'System Requirements'}
+                         </h3>
                       </div>
                       <span className="text-[10px] font-mono text-white/20 uppercase tracking-[0.4em]">Compatibility: Pass</span>
                    </div>
 
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-                      <div className="space-y-8">
-                         <h4 className="text-[10px] font-bold uppercase tracking-widest text-primary italic">Minimum Specs</h4>
-                         <div className="space-y-6">
-                            {selectedNode?.specs.map(spec => (
-                              <div key={spec.label} className="flex justify-between border-b border-white/5 pb-2 hover:bg-white/[0.02] transition-colors px-2">
-                                 <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 italic">{spec.label}</span>
-                                 <p className="text-xs font-mono text-white/90">{spec.value}</p>
-                              </div>
-                            ))}
-                         </div>
-                      </div>
-
-                      <div className="space-y-8">
-                         <h4 className="text-[10px] font-bold uppercase tracking-widest text-primary italic">Recommended Specs</h4>
-                         <div className="space-y-6">
-                            {selectedNode?.recommendedSpecs.map(spec => (
-                              <div key={spec.label} className="flex justify-between border-b border-white/5 pb-2 hover:bg-white/[0.02] transition-colors px-2">
-                                 <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 italic">{spec.label}</span>
-                                 <p className="text-xs font-mono text-white/90">{spec.value}</p>
-                              </div>
-                            ))}
-                         </div>
-                      </div>
+                      {selectedNode?.appId ? (
+                        <div className="col-span-2 space-y-12">
+                           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                              <MetricBox label="Integrity Score" value={`${selectedNode.achievementProgress?.percentage || 0}%`} sub="Achievement Sync" />
+                              <MetricBox label="Milestones" value={`${selectedNode.achievementProgress?.completed || 0} / ${selectedNode.achievementProgress?.total || 0}`} sub="Tactical Peaks" />
+                              <MetricBox label="App Identifier" value={`REF_${selectedNode.appId}`} sub="Global Network" />
+                           </div>
+                           
+                           {selectedNode.achievementProgress && (
+                             <div className="w-full h-2 bg-white/5 relative overflow-hidden">
+                               <motion.div 
+                                 initial={{ width: 0 }}
+                                 animate={{ width: `${selectedNode.achievementProgress.percentage}%` }}
+                                 className="absolute h-full bg-primary"
+                               />
+                             </div>
+                           )}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="space-y-8">
+                             <h4 className="text-[10px] font-bold uppercase tracking-widest text-primary italic">Minimum Specs</h4>
+                             <div className="space-y-6">
+                                {selectedNode?.specs.map(spec => (
+                                  <div key={spec.label} className="flex justify-between border-b border-white/5 pb-2 hover:bg-white/[0.02] transition-colors px-2">
+                                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 italic">{spec.label}</span>
+                                     <p className="text-xs font-mono text-white/90">{spec.value}</p>
+                                  </div>
+                                ))}
+                             </div>
+                          </div>
+    
+                          <div className="space-y-8">
+                             <h4 className="text-[10px] font-bold uppercase tracking-widest text-primary italic">Recommended Specs</h4>
+                             <div className="space-y-6">
+                                {selectedNode?.recommendedSpecs.map(spec => (
+                                  <div key={spec.label} className="flex justify-between border-b border-white/5 pb-2 hover:bg-white/[0.02] transition-colors px-2">
+                                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 italic">{spec.label}</span>
+                                     <p className="text-xs font-mono text-white/90">{spec.value}</p>
+                                  </div>
+                                ))}
+                             </div>
+                          </div>
+                        </>
+                      )}
                    </div>
                 </div>
 
@@ -386,7 +639,7 @@ export function LibraryPage() {
                           onClick={() => setSelectedNodeId(game.id)}
                           className="group flex gap-6 items-center cursor-pointer hover:bg-white/5 transition-all p-4 -mx-4 border border-transparent hover:border-white/10"
                         >
-                           <div className="w-20 h-24 shrink-0 overflow-hidden grayscale group-hover:grayscale-0 transition-all">
+                           <div className="w-20 h-24 shrink-0 overflow-hidden transition-all">
                               <img src={game.image} className="w-full h-full object-cover" alt="" />
                            </div>
                            <div className="flex-grow space-y-2">
@@ -400,7 +653,7 @@ export function LibraryPage() {
                       ))}
                    </div>
 
-                   <div className="mt-12 p-8 border border-white/5 bg-white/[0.02] flex flex-col items-center justify-center gap-4 grayscale opacity-40 hover:opacity-100 hover:grayscale-0 transition-all cursor-pointer">
+                   <div className="mt-12 p-8 border border-white/5 bg-white/[0.02] flex flex-col items-center justify-center gap-4 opacity-40 hover:opacity-100 transition-all cursor-pointer">
                       <Search className="w-6 h-6 text-primary" />
                       <span className="text-[10px] font-black uppercase tracking-[0.3em]">Explore More</span>
                    </div>
@@ -414,6 +667,16 @@ export function LibraryPage() {
   );
 }
 
+function MetricBox({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="bg-white/5 p-8 border border-white/10 hover:bg-white/10 transition-colors">
+       <span className="text-[9px] font-bold uppercase tracking-widest text-primary block mb-4">{label}</span>
+       <p className="text-4xl font-mono italic text-white/90 truncate">{value}</p>
+       <span className="text-[8px] font-mono uppercase text-white/20 mt-2 block">{sub}</span>
+    </div>
+  );
+}
+
 function MetadataItem({ label, value, color = "text-white/80" }: { label: string; value?: string; color?: string }) {
   return (
     <div className="space-y-2">
@@ -423,9 +686,11 @@ function MetadataItem({ label, value, color = "text-white/80" }: { label: string
   );
 }
 
-function FilterChip({ label, active = false }: { label: string; active?: boolean }) {
+function FilterChip({ label, active = false, onClick }: { label: string; active?: boolean; onClick?: () => void }) {
   return (
-    <button className={`px-6 py-2 border text-[10px] uppercase font-bold tracking-widest transition-colors ${
+    <button 
+      onClick={onClick}
+      className={`px-6 py-2 border text-[10px] uppercase font-bold tracking-widest transition-colors ${
       active ? 'bg-primary text-black border-primary' : 'bg-transparent text-white/70 border-white/20 hover:border-white/60 hover:text-white'
     }`}>
       {label}
@@ -436,7 +701,7 @@ function FilterChip({ label, active = false }: { label: string; active?: boolean
 interface GameRowProps {
   title: string;
   image: string;
-  status: 'INSTALLED' | 'AVAILABLE';
+  status: 'INSTALLED' | 'AVAILABLE' | 'STEAM_CLOUD';
   hours: string;
   lastPlayed: string;
   liked: boolean;
@@ -450,8 +715,21 @@ const GameRow: React.FC<GameRowProps> = ({ title, image, status, hours, lastPlay
       onClick={onClick}
       className="p-8 bg-background flex flex-col md:flex-row items-center gap-12 group hover:bg-white/[0.03] transition-colors cursor-pointer border-b border-white/5 last:border-b-0"
     >
-      <div className="w-full md:w-32 h-40 shrink-0 bg-neutral-900 grayscale border border-white/10 overflow-hidden relative">
-        <img alt={title} src={image} className="w-full h-full object-cover mix-blend-luminosity opacity-40 group-hover:opacity-100 transition-all duration-500 scale-110 group-hover:scale-100" />
+      <div className="w-full md:w-32 h-40 shrink-0 bg-neutral-900 border border-white/10 overflow-hidden relative">
+        <img 
+          alt={title} 
+          src={image} 
+          className="w-full h-full object-cover transition-all duration-500 scale-110 group-hover:scale-100" 
+          onError={(e) => {
+            // Fallback to header if portrait is missing
+            const target = e.target as HTMLImageElement;
+            if (target.src.includes('library_600x900')) {
+              target.src = target.src.replace('library_600x900.jpg', 'header.jpg');
+            } else {
+              target.src = 'https://images.unsplash.com/photo-1614013410980-6e1307224211?auto=format&fit=crop&q=80&w=400';
+            }
+          }}
+        />
         <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
       </div>
       
