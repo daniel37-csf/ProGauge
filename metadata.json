@@ -1,6 +1,6 @@
 {
   "name": "Pro-Gauge",
-  "description": "A refined gamer dashboard for tracking events, progress, and game library.",
+  "description": "A refined gamer dashboard for tracking events, progress, and game library with Supabase profile sync.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

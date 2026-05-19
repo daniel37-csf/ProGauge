@@ -93,20 +93,20 @@ export function AlertsPage() {
   return (
     <div className="space-y-xl animate-in fade-in duration-700 max-w-5xl mx-auto pb-12 relative">
       <div className="absolute top-0 right-[-100px] hidden xl:block text-[8px] font-mono text-white/5 vertical-text h-full tracking-[1em] pointer-events-none">
-        ENCRYPTED_SIGNAL_PREFERENCE_LOAD_SUCCESS_DATA_PKT_082.9
+        SIGNAL_PREFERENCE_LOADED
       </div>
 
       <div className="border-b border-white/10 pb-12 flex flex-col md:flex-row justify-between items-end gap-12">
         <div className="max-w-xl">
-          <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Signal Center</span>
-          <h2 className="text-[80px] md:text-[100px] lg:text-[140px] leading-[0.7] font-black uppercase tracking-tighter mt-4 transition-all">Alert<br/><span className="text-primary italic">S</span>ync</h2>
+          <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Notification Center</span>
+          <h2 className="text-[80px] md:text-[100px] lg:text-[140px] leading-[0.7] font-black uppercase tracking-tighter mt-4 transition-all">Alerts</h2>
           <p className="text-white/60 font-serif italic text-lg md:text-xl mt-8 max-w-xs leading-tight">
-            Manage tactical telemetry and node synchronization alerts.
+            Manage account notifications and system alerts.
           </p>
         </div>
         <div className="hidden lg:flex flex-col items-end gap-2 text-right">
-          <span className="text-[10px] font-mono text-white/40 uppercase tracking-[0.3em]">Latency Threshold</span>
-          <span className="text-4xl font-mono font-light italic text-primary">±0.02ms</span>
+          <span className="text-[10px] font-mono text-white/40 uppercase tracking-[0.3em]">Network Status</span>
+          <span className="text-4xl font-mono font-light italic text-primary">Online</span>
         </div>
       </div>
 
@@ -114,7 +114,7 @@ export function AlertsPage() {
         <section className="bg-background p-12 flex flex-col gap-12">
           <div className="flex items-center gap-4">
             <Calendar className="w-5 h-5 text-primary" />
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Event Thresholds</h3>
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Event Notifications</h3>
           </div>
           <div className="space-y-2">
             <ToggleRow label="Tournament Starts" enabled={settings.tournamentStarts} onToggle={() => toggleSetting('tournamentStarts')} />
@@ -126,12 +126,12 @@ export function AlertsPage() {
         <section className="bg-background p-12 flex flex-col gap-12 lg:border-l border-white/10">
           <div className="flex items-center gap-4">
             <TrendingUp className="w-5 h-5 text-primary" />
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Progress Telemetry</h3>
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Activity Updates</h3>
           </div>
           <div className="space-y-2">
-            <ToggleRow label="Rank Oscillation" enabled={settings.rankChange} onToggle={() => toggleSetting('rankChange')} />
-            <ToggleRow label="Weekly Sync" enabled={settings.weeklySummary} onToggle={() => toggleSetting('weeklySummary')} />
-            <ToggleRow label="Milestone Hits" enabled={settings.goalMilestones} onToggle={() => toggleSetting('goalMilestones')} />
+            <ToggleRow label="Rank Changes" enabled={settings.rankChange} onToggle={() => toggleSetting('rankChange')} />
+            <ToggleRow label="Weekly Summary" enabled={settings.weeklySummary} onToggle={() => toggleSetting('weeklySummary')} />
+            <ToggleRow label="Milestone Achievements" enabled={settings.goalMilestones} onToggle={() => toggleSetting('goalMilestones')} />
           </div>
         </section>
       </div>
@@ -141,7 +141,7 @@ export function AlertsPage() {
         <div className="p-8 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
           <div className="flex items-center gap-4">
             <Bell className="w-5 h-5 text-primary" />
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Operational Inbox</h3>
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Inbox</h3>
           </div>
           <button 
             onClick={markAllRead}
@@ -192,7 +192,7 @@ export function AlertsPage() {
                          <div className="p-12 border-t border-white/5 space-y-8">
                             <div className="flex items-center gap-4 text-primary">
                                <Terminal className="w-4 h-4" />
-                               <span className="text-[10px] font-bold uppercase tracking-[0.3em]">Diagnostic_Log_Trace</span>
+                               <span className="text-[10px] font-bold uppercase tracking-[0.3em]">Details</span>
                             </div>
                             <div className="space-y-4 font-mono">
                                {n.logs.map((log, i) => (
@@ -205,10 +205,10 @@ export function AlertsPage() {
                             </div>
                             <div className="pt-8 grid grid-cols-2 gap-4">
                                <button className="py-4 border border-white/10 text-[9px] font-black uppercase tracking-[0.3em] text-white/40 hover:text-white hover:border-white transition-all">
-                                  Trace_Route
+                                  Trace Route
                                </button>
                                <button className="py-4 bg-white/5 text-[9px] font-black uppercase tracking-[0.3em] text-white/80 hover:bg-white hover:text-black transition-all">
-                                  Sync_Clear
+                                  Dismiss
                                </button>
                             </div>
                          </div>
@@ -221,7 +221,7 @@ export function AlertsPage() {
             {notifications.length === 0 && (
               <div className="p-32 flex flex-col items-center justify-center grayscale opacity-10 space-y-6">
                 <Shield className="w-16 h-16" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.4em]">Signal_Flatline</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.4em]">No Notifications</span>
               </div>
             )}
           </div>
@@ -230,7 +230,7 @@ export function AlertsPage() {
 
       <div className="flex justify-end pt-12">
         <button className="bg-white text-black font-black uppercase tracking-[0.4em] px-16 py-6 text-sm hover:bg-primary transition-all active:scale-95 shadow-xl shadow-primary/20">
-          Sync Configuration
+          Save Settings
         </button>
       </div>
     </div>

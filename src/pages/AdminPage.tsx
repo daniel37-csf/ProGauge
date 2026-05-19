@@ -7,7 +7,7 @@ import { collection, onSnapshot, query, orderBy, limit, setDoc, doc, deleteDoc, 
 export function AdminPage() {
   const [systemOnline, setSystemOnline] = useState(true);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [broadcastMessage, setBroadcastMessage] = useState('LIVE_PHASE_01_ACTIVE');
+  const [broadcastMessage, setBroadcastMessage] = useState('SYSTEM_LIVE');
   const [activeNodes, setActiveNodes] = useState(42);
   const [users, setUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,7 +36,7 @@ export function AdminPage() {
         <div className="max-w-xl w-full">
           <div className="flex flex-wrap items-center gap-3 md:gap-4 mb-4">
             <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-[0.3em] text-red-500 bg-red-500/10 px-2 md:px-3 py-1 border border-red-500/20">Elevated Privileges</span>
-            <span className="text-[9px] md:text-[10px] font-mono text-white/40 uppercase tracking-widest">Root_Access_Granted</span>
+            <span className="text-[9px] md:text-[10px] font-mono text-white/40 uppercase tracking-widest">Admin Access Granted</span>
           </div>
           <h2 className="text-[60px] sm:text-[80px] md:text-[100px] lg:text-[140px] leading-[0.8] md:leading-[0.7] font-black uppercase tracking-tighter transition-all break-words">
             Admi<span className="text-primary italic">n</span><br/>Consol<span className="text-primary">e</span>
@@ -48,7 +48,7 @@ export function AdminPage() {
             <span className="text-2xl font-mono font-light italic text-primary">32°C</span>
           </div>
           <div className="flex flex-col items-end">
-            <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest">Auth_Token_TTL</span>
+            <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest">Session Timeout</span>
             <span className="text-2xl font-mono font-light italic text-white/60">02:59:59</span>
           </div>
         </div>
@@ -60,13 +60,13 @@ export function AdminPage() {
           <section className="border border-white/10 p-6 md:p-12 bg-white/[0.02]">
             <div className="flex items-center gap-4 mb-8 md:mb-12">
               <Terminal className="w-5 h-5 text-primary" />
-              <h3 className="text-lg md:text-xl font-black uppercase tracking-widest">Global Directives</h3>
+              <h3 className="text-lg md:text-xl font-black uppercase tracking-widest">Global Management</h3>
             </div>
             
             <div className="space-y-8 md:space-y-12">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
                 <div className="flex flex-col gap-4">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">Broadcast_ID</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">Broadcast Message</label>
                   <input 
                     type="text" 
                     value={broadcastMessage}
@@ -75,7 +75,7 @@ export function AdminPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-4">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">Node_Capacity</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">Server Capacity</label>
                   <div className="flex items-center gap-4 md:gap-6">
                     <input 
                       type="range" 
@@ -92,21 +92,21 @@ export function AdminPage() {
 
               <div className="pt-8 md:pt-12 border-t border-white/10">
                 <div className="w-full">
-                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-6 italic text-center md:text-left">Maintenance_State</h4>
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-6 italic text-center md:text-left">Maintenance State</h4>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 md:gap-12">
                     <button 
                       onClick={() => setMaintenanceMode(!maintenanceMode)}
                       className={`px-6 md:px-8 py-3 md:py-4 border font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-xs transition-all flex items-center justify-center gap-4 flex-1 ${maintenanceMode ? 'bg-red-500 border-red-500 text-white' : 'border-white/20 text-white/40 hover:border-white/60 hover:text-white'}`}
                     >
                       {maintenanceMode ? <AlertTriangle className="w-4 md:w-5 h-4 md:h-5" /> : null}
-                      <span>{maintenanceMode ? 'Maintenance_Active' : 'Initialize_Maintenance'}</span>
+                      <span>{maintenanceMode ? 'Maintenance Active' : 'Start Maintenance'}</span>
                     </button>
                     <button 
                       onClick={() => setSystemOnline(!systemOnline)}
                       className={`px-6 md:px-8 py-3 md:py-4 border font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-xs transition-all flex items-center justify-center gap-4 flex-1 ${systemOnline ? 'bg-primary border-primary text-black' : 'border-red-500 bg-red-500/10 text-red-500'}`}
                     >
                       <Activity className="w-4 md:w-5 h-4 md:h-5" />
-                      <span>{systemOnline ? 'System_Online' : 'System_Offline'}</span>
+                      <span>{systemOnline ? 'System Online' : 'System Offline'}</span>
                     </button>
                   </div>
                 </div>
@@ -118,7 +118,7 @@ export function AdminPage() {
           <section className="border border-white/10 p-6 md:p-12 bg-white/[0.02]">
             <div className="flex items-center gap-4 mb-8 md:mb-12">
               <Shield className="w-5 h-5 text-primary" />
-              <h3 className="text-lg md:text-xl font-black uppercase tracking-widest">Privilege Escalation</h3>
+              <h3 className="text-lg md:text-xl font-black uppercase tracking-widest">Admin Permissions</h3>
             </div>
             
             <AdminManager />
@@ -131,17 +131,17 @@ export function AdminPage() {
                 <Activity className="w-4 h-4 text-white/40" />
                 <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/60">Real-Time Access Logs</h3>
               </div>
-              <span className="text-[8px] font-mono text-white/20">REF_ID: 99.102.8B</span>
+              <span className="text-[8px] font-mono text-white/20">REF ID: 99.102.8B</span>
             </div>
             <div className="divide-y divide-white/5 font-mono text-[10px] uppercase tracking-widest">
               {isLoading ? (
-                <div className="p-12 text-center text-white/20 animate-pulse">Syncing_Records...</div>
+                <div className="p-12 text-center text-white/20 animate-pulse">Syncing Records...</div>
               ) : users.map((u, i) => (
                 <div key={u.id}>
                   <LogEntry 
                     time={u.createdAt?.toDate ? u.createdAt.toDate().toLocaleTimeString() : '00:00:00'} 
                     user={u.username} 
-                    action="NODE_REGISTRATION" 
+                    action="USER_REGISTRATION" 
                     ip={u.email} 
                     uid={u.id}
                     status={i === 0 ? "NEW" : "SYNCED"}
@@ -150,7 +150,7 @@ export function AdminPage() {
                 </div>
               ))}
               {!isLoading && users.length === 0 && (
-                <div className="p-12 text-center text-white/20">No_Nodes_Registered</div>
+                <div className="p-12 text-center text-white/20">No Users Registered</div>
               )}
             </div>
           </section>
@@ -161,7 +161,7 @@ export function AdminPage() {
           <div className="p-8 border border-white/10 bg-white text-black flex flex-col justify-between h-64 sm:h-80">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">Resource Load</span>
-              <h4 className="text-3xl sm:text-4xl font-black uppercase tracking-tighter mt-4">Cluster_8</h4>
+              <h4 className="text-3xl sm:text-4xl font-black uppercase tracking-tighter mt-4">Cluster 8</h4>
             </div>
             <div className="space-y-6">
               <StatBar label="CPU Load" value={84} />
@@ -175,14 +175,14 @@ export function AdminPage() {
               <Cpu className="w-24 h-24 rotate-12 group-hover:rotate-0 transition-transform duration-1000" />
             </div>
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Privilege Matrix</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Permission Matrix</span>
               <p className="text-xs text-white/60 font-serif italic mt-6 leading-relaxed">
-                Control the distribution of tactical resources across the global network architecture.
+                Control the distribution of resources across the network.
               </p>
             </div>
             <button className="w-full py-4 border border-white/20 hover:border-primary hover:text-primary transition-all font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-4">
               <Save className="w-4 h-4" />
-              <span>Commit Changes</span>
+              <span>Save Changes</span>
             </button>
           </div>
         </div>
@@ -231,7 +231,7 @@ function AdminManager() {
       });
       setNewUid('');
       setNewEmail('');
-      setMsg({ text: 'PRVLILEGE_GRANTED: NODE_AUTHORIZED' });
+      setMsg({ text: 'Permissions Granted' });
     } catch (err: any) {
       setMsg({ text: err.message, error: true });
     } finally {
@@ -240,7 +240,7 @@ function AdminManager() {
   };
 
   const removeAdmin = async (uid: string) => {
-    if (!confirm('CONFIRM_DE-AUTHORIZATION?')) return;
+    if (!confirm('Confirm removing admin?')) return;
     try {
       await deleteDoc(doc(db, 'admins', uid));
     } catch (err: any) {
@@ -252,7 +252,7 @@ function AdminManager() {
     <div className="space-y-8">
       <form onSubmit={handleAddAdmin} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
         <div className="flex flex-col gap-2">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">User_UID</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">User ID</label>
           <input 
             type="text" 
             placeholder="UID"
@@ -263,7 +263,7 @@ function AdminManager() {
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">Auth_Email</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">Email</label>
           <input 
             type="email" 
             placeholder="EMAIL@DOMAIN.COM"
@@ -274,7 +274,7 @@ function AdminManager() {
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">Privilege_Level</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">Admin Level</label>
           <select 
             value={newRole}
             onChange={(e) => setNewRole(e.target.value as any)}
@@ -288,7 +288,7 @@ function AdminManager() {
           disabled={isSubmitting}
           className="bg-primary text-black font-black uppercase tracking-widest p-3 text-xs hover:bg-white transition-all flex items-center justify-center gap-2 h-[42px] mt-2 sm:mt-0"
         >
-          {isSubmitting ? 'WORKING...' : <><Plus className="w-4 h-4" /> <span>Elevate</span></>}
+          {isSubmitting ? 'Working...' : <><Plus className="w-4 h-4" /> <span>Elevate</span></>}
         </button>
       </form>
 
@@ -336,7 +336,7 @@ function LogEntry({ time, user, action, ip, uid, status, color = "text-white/60"
           <span className="text-white/20 font-mono text-[8px] md:text-[10px] shrink-0 italic">[{time}]</span>
           <div className="flex flex-col min-w-[120px]">
             <span className="font-bold text-white/80 text-[10px] md:text-xs truncate uppercase tracking-widest">{user}</span>
-            {uid && <span className="text-[7px] md:text-[8px] font-mono text-white/10 select-all cursor-pointer hover:text-primary transition-colors truncate max-w-[150px]">UID_{uid.slice(0, 8)}...</span>}
+            {uid && <span className="text-[7px] md:text-[8px] font-mono text-white/10 select-all cursor-pointer hover:text-primary transition-colors truncate max-w-[150px]">UID {uid.slice(0, 8)}...</span>}
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-1 h-1 rounded-full ${isExpanded ? 'bg-primary' : 'bg-white/20'}`} />
@@ -361,9 +361,9 @@ function LogEntry({ time, user, action, ip, uid, status, color = "text-white/60"
               <div className="flex items-center justify-between">
                  <div className="flex items-center gap-3 text-primary/60">
                     <Terminal className="w-3 h-3" />
-                    <span className="text-[9px] font-bold uppercase tracking-[0.3em]">Payload_Inspection</span>
+                    <span className="text-[9px] font-bold uppercase tracking-[0.3em]">Log Data</span>
                  </div>
-                 <span className="text-[8px] font-mono text-white/10">FORMAT: JSON_STRICT</span>
+                 <span className="text-[8px] font-mono text-white/10">FORMAT: JSON</span>
               </div>
               <div className="bg-black/60 p-6 md:p-8 border border-white/5 font-mono text-[9px] md:text-xs leading-relaxed overflow-x-auto scrollbar-hide">
                  <pre className="text-primary/80">
@@ -371,21 +371,21 @@ function LogEntry({ time, user, action, ip, uid, status, color = "text-white/60"
   meta: {
     id: uid,
     username: user,
-    sync_status: status,
-    trace_time: time
+    status: status,
+    time: time
   },
   capabilities: ["MFA_ACTIVE", "GEO_VERIFIED"],
-  entry_point: "BEO_SERVER_NORTH_1",
+  server: "BEO_SERVER_NORTH_1",
   security_hash: "0x" + Math.random().toString(16).slice(2, 10).toUpperCase()
 }, null, 2)}
                  </pre>
               </div>
               <div className="flex flex-col sm:flex-row gap-4 pt-4">
                  <button className="flex-1 py-3 border border-white/10 text-[9px] font-black uppercase tracking-[0.4em] text-white/40 hover:text-white hover:border-white transition-all">
-                    Reset_Credentials
+                    Reset Credentials
                  </button>
                  <button className="flex-1 py-3 border border-white/10 text-[9px] font-black uppercase tracking-[0.4em] text-white/40 hover:text-red-500 hover:border-red-500 transition-all">
-                    Terminate_Session
+                    End Session
                  </button>
               </div>
             </div>

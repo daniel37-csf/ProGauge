@@ -18,13 +18,13 @@ export function LandingPage() {
             onClick={() => navigate('/login')}
             className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60 hover:text-primary transition-colors"
           >
-            Access_Node
+            Login
           </button>
           <button 
             onClick={() => navigate('/login')}
             className="px-6 py-2 border border-white/20 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-white hover:text-black transition-all"
           >
-            Register_Terminal
+            Sign Up
           </button>
         </div>
       </nav>
@@ -45,18 +45,18 @@ export function LandingPage() {
         >
           <div className="flex items-center justify-center gap-4 mb-8">
             <span className="h-px w-8 md:w-12 bg-primary/40" />
-            <span className="text-[10px] font-mono uppercase tracking-[0.5em] text-primary">Global_Sync_Available</span>
+            <span className="text-[10px] font-mono uppercase tracking-[0.5em] text-primary">Live Updates Available</span>
             <span className="h-px w-8 md:w-12 bg-primary/40" />
           </div>
 
           <h1 className="text-[70px] sm:text-[100px] md:text-[160px] lg:text-[220px] font-black uppercase tracking-tighter leading-[0.75] mb-8">
-            Node<br/>
-            Sync<span className="text-primary italic">.</span><br/>
-            C<span className="text-primary">o</span>re
+            Data<br/>
+            Flow<span className="text-primary italic">.</span><br/>
+            Studio
           </h1>
 
           <p className="max-w-xl mx-auto text-sm md:text-base text-white/40 font-mono tracking-widest uppercase mb-12 px-4 italic">
-            The ultimate terminal for real-time node monitoring, cluster management, and high-fidelity encrypted data synchronization.
+            A comprehensive platform for real-time monitoring and seamless data synchronization.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
@@ -64,13 +64,13 @@ export function LandingPage() {
               onClick={() => navigate('/login')}
               className="w-full sm:w-auto px-12 py-5 bg-primary text-black font-black uppercase tracking-[0.3em] text-xs hover:bg-white transition-all flex items-center justify-center gap-4 group"
             >
-              <span>Initialize_Link</span>
+              <span>Get Started</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
             <button 
               className="w-full sm:w-auto px-12 py-5 border border-white/20 text-white font-black uppercase tracking-[0.3em] text-xs hover:bg-white/10 transition-all"
             >
-              System_Specs
+              Learn More
             </button>
           </div>
         </motion.div>
@@ -89,18 +89,18 @@ export function LandingPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
           <FeatureCard 
             icon={<Shield className="w-8 h-8 text-primary" />}
-            title="Ironclad_Security"
-            desc="RSA_4096 endpoint encryption and multi-factor biometric handshake protocols across all synced nodes."
+            title="Secure Storage"
+            desc="Advanced encryption and multi-factor authentication protocols to keep your profile and data protected."
           />
           <FeatureCard 
             icon={<Activity className="w-8 h-8 text-primary" />}
-            title="Zero_Latency"
-            desc="Optimized WebSocket tunnels ensuring sub-millisecond data propagation across the global cluster."
+            title="Real-time Sync"
+            desc="Optimized connections ensuring your data is synchronized instantly across all your devices."
           />
           <FeatureCard 
             icon={<Zap className="w-8 h-8 text-primary" />}
-            title="Async_Compute"
-            desc="Distributed processing capabilities allowing for complex node management without local overhead."
+            title="Cloud Powered"
+            desc="Distributed computing capabilities allowing for complex data management without hardware limitations."
           />
         </div>
       </section>
@@ -108,17 +108,17 @@ export function LandingPage() {
       {/* Technical Banner */}
       <section className="border-y border-white/5 py-12 bg-white/[0.02] flex items-center justify-center overflow-hidden whitespace-nowrap">
         <div className="flex gap-24 animate-carousel">
-          <TechItem label="PROTOCOL" value="SECURE_SYNC_v4.2" />
-          <TechItem label="UPTIME" value="99.9997%" />
-          <TechItem label="ENCRYPTION" value="AES_256_GCM" />
-          <TechItem label="NODES" value="8,492_ACTIVE" />
-          <TechItem label="LATENCY" value="<0.02ms" />
+          <TechItem label="STATUS" value="SECURE" />
+          <TechItem label="UPTIME" value="99.9%" />
+          <TechItem label="SECURITY" value="ENCRYPTED" />
+          <TechItem label="REGION" value="GLOBAL" />
+          <TechItem label="SPEED" value="FAST" />
           {/* Duplicate for seamless scroll */}
-          <TechItem label="PROTOCOL" value="SECURE_SYNC_v4.2" />
-          <TechItem label="UPTIME" value="99.9997%" />
-          <TechItem label="ENCRYPTION" value="AES_256_GCM" />
-          <TechItem label="NODES" value="8,492_ACTIVE" />
-          <TechItem label="LATENCY" value="<0.02ms" />
+          <TechItem label="STATUS" value="SECURE" />
+          <TechItem label="UPTIME" value="99.9%" />
+          <TechItem label="SECURITY" value="ENCRYPTED" />
+          <TechItem label="REGION" value="GLOBAL" />
+          <TechItem label="SPEED" value="FAST" />
         </div>
       </section>
 
@@ -131,18 +131,18 @@ export function LandingPage() {
               <span className="font-black uppercase tracking-[0.3em] text-sm italic">Pro/Gauge</span>
             </div>
             <p className="text-[10px] font-mono text-white/20 uppercase tracking-widest text-center md:text-left">
-              Advanced Node Synchronization Interface.<br/>
-              Developed for high-stakes cluster management.
+              Seamless Data Synchronization.<br/>
+              Developed for high-performance players.
             </p>
           </div>
           <div className="flex gap-12 text-[10px] font-bold uppercase tracking-widest text-white/40">
-            <a href="#" className="hover:text-primary transition-colors">Privacy_Core</a>
-            <a href="#" className="hover:text-primary transition-colors">System_Terms</a>
-            <a href="#" className="hover:text-primary transition-colors">Contact_Support</a>
+            <a href="#" className="hover:text-primary transition-colors">Privacy Policy</a>
+            <a href="#" className="hover:text-primary transition-colors">Terms of Service</a>
+            <a href="#" className="hover:text-primary transition-colors">Support</a>
           </div>
         </div>
         <div className="mt-24 text-center text-[8px] font-mono text-white/10 uppercase tracking-[1em]">
-          © 2026 PRO-GAUGE INTNL GLOBAL SYSTEMS DIVISION
+          © 2026 PRO-GAUGE GLOBAL SYSTEMS
         </div>
       </footer>
     </div>

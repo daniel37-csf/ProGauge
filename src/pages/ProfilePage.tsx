@@ -1,7 +1,6 @@
 import React, { useState, FormEvent, useRef, useEffect } from 'react';
-import { auth, db, storage, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, handleFirestoreError, OperationType } from '../lib/firebase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { User, Shield, Key, Camera, Info, Save, ChevronRight, Binary, Globe, Clock, Activity, Lock, Mail, Monitor, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -32,7 +31,11 @@ function SettingField({ label, value, onChange, type = 'text', placeholder, icon
   );
 }
 
-export function ProfilePage() {
+interface ProfilePageProps {
+  onAvatarUpdate?: (url: string) => void;
+}
+
+export function ProfilePage({ onAvatarUpdate }: ProfilePageProps) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
@@ -40,6 +43,7 @@ export function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [showVault, setShowVault] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [errorVisible, setErrorVisible] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,15 +57,35 @@ export function ProfilePage() {
       setEmail(user.email || '');
 
       try {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.uid)
+          .single();
+
+        if (error) {
+          if (error.code === 'PGRST116') {
+            // No profile found, this is fine
+            return;
+          }
+          if ((error.message?.toLowerCase().includes('profiles') && 
+               (error.message?.toLowerCase().includes('schema cache') || error.message?.toLowerCase().includes('does not exist'))) ||
+              error.code === '22P02') {
+            setErrorVisible('SCHEMA_RECOVERY: TABLE_MISSING');
+            return;
+          }
+          throw error;
+        }
+
+        if (data) {
           setUsername(data.username || user.displayName || '');
           setBio(data.bio || '');
-          setAvatar(data.avatar || user.photoURL || avatar);
+          const currentAvatar = data.avatar_url || user.photoURL || avatar;
+          setAvatar(currentAvatar);
+          if (onAvatarUpdate) onAvatarUpdate(currentAvatar);
         }
       } catch (error) {
-        console.error('Failed to load profile:', error);
+        console.error('Failed to load profile from Supabase:', error);
       }
     };
 
@@ -89,36 +113,69 @@ export function ProfilePage() {
       return;
     }
 
-    // Check file size (e.g., 5MB limit)
+    // Check file size (5MB limit)
     if (file.size > 5 * 1024 * 1024) {
       setErrorVisible('PAYLOAD_ERROR: FILE_TOO_LARGE');
       return;
     }
 
     setIsUploading(true);
+    setUploadProgress(0);
     setErrorVisible(null);
 
     try {
-      const storageRef = ref(storage, `avatars/${user.uid}`);
+      const fileExt = (file.name.split('.').pop() || 'png').replace(/[^a-z0-9]/gi, '').toLowerCase();
+      // Use the standard folder-based path: {uid}/{timestamp}.{ext}
+      // Most Supabase RLS policies for storage depend on the first folder being the user's UID.
+      const filePath = `${user.uid}/${Date.now()}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          upsert: true,
+          cacheControl: '3600',
+          contentType: file.type
+        });
+
+      if (uploadError) {
+        console.error('Supabase Storage Error Details:', uploadError);
+        // Provide a more helpful message for RLS errors
+        if (uploadError.message?.includes('row-level security')) {
+          throw new Error('Permission denied. Please ensure your Supabase Storage RLS policies allow authenticated uploads to the "avatars" bucket.');
+        }
+        if (uploadError.message?.toLowerCase().includes('profiles') && 
+            (uploadError.message?.toLowerCase().includes('schema cache') || uploadError.message?.toLowerCase().includes('does not exist') || uploadError.message?.toLowerCase().includes('uuid'))) {
+          throw new Error('Database table "profiles" schema mismatch (likely UUID vs TEXT). See setup instructions below.');
+        }
+        throw uploadError;
+      }
+
+      // Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      setAvatar(publicUrl);
+      if (onAvatarUpdate) onAvatarUpdate(publicUrl);
       
-      // Using uploadBytes for direct promise-based upload
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
-      
-      setAvatar(downloadURL);
-      
-      // Update user doc immediately
-      await updateDoc(doc(db, 'users', user.uid), {
-        avatar: downloadURL,
-        updatedAt: serverTimestamp()
-      });
+      // Update profile immediately
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.uid,
+          avatar_url: publicUrl,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+
+      if (updateError) throw updateError;
       
       setIsUploading(false);
+      setUploadProgress(100);
     } catch (error: any) {
-      console.error('Upload Failed:', error);
-      setErrorVisible(`UPLINK_FAILURE: ${error.code || 'UNKNOWN_ERROR'}`);
+      console.error('Supabase Upload Failed:', error);
+      setErrorVisible(`UPLINK_FAILURE: ${error.message || 'UNKNOWN_ERROR'}`);
       setIsUploading(false);
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     }
   };
 
@@ -134,15 +191,22 @@ export function ProfilePage() {
 
     setIsSaving(true);
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        username,
-        bio,
-        updatedAt: serverTimestamp()
-      });
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.uid,
+          username,
+          bio,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+
+      if (error) throw error;
+
       setIsSaving(false);
-      alert('IDENTITY_SYNC_COMPLETE');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      alert('Profile updated successfully');
+    } catch (error: any) {
+      console.error('Database Sync Failed:', error);
+      setErrorVisible(`SYNC_FAILURE: ${error.message || 'UNKNOWN_ERROR'}`);
       setIsSaving(false);
     }
   };
@@ -150,11 +214,11 @@ export function ProfilePage() {
   const handleUpdatePassword = (e: FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      alert('PARITY_ERROR: PASSWORDS_DO_NOT_MATCH');
+      alert('Passwords do not match');
       return;
     }
     // Simulate API call
-    alert('VAULT_KEY_ROTATED');
+    alert('Password updated successfully');
     setShowVault(false);
     setCurrentPassword('');
     setNewPassword('');
@@ -163,25 +227,80 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-xl animate-in fade-in duration-700">
+      {!isSupabaseConfigured && (
+        <div className="bg-yellow-500/20 border border-yellow-500/50 p-6 flex items-center gap-4 animate-in slide-in-from-top duration-500">
+          <Info className="w-5 h-5 text-yellow-500" />
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-yellow-500">Setup Required</p>
+            <p className="text-xs text-yellow-500/80">Supabase is not configured. Please add <code className="bg-yellow-500/10 px-1">VITE_SUPABASE_URL</code> and <code className="bg-yellow-500/10 px-1">VITE_SUPABASE_ANON_KEY</code> to your secrets.</p>
+          </div>
+        </div>
+      )}
+
+      {errorVisible === 'SCHEMA_RECOVERY: TABLE_MISSING' && (
+        <div className="bg-red-500/10 border border-red-500/50 p-8 space-y-6 animate-in slide-in-from-top duration-500">
+          <div className="flex items-center gap-4 text-red-500">
+            <Binary className="w-6 h-6" />
+            <h3 className="text-sm font-black uppercase tracking-[0.2em]">Database Error</h3>
+          </div>
+          <div className="space-y-4">
+            <p className="text-xs text-white/60 leading-relaxed">
+              The <code className="text-red-400">profiles</code> table does not exist in your Supabase database. 
+              Please run the following SQL in your <span className="text-white">Supabase SQL Editor</span> to initialize the schema:
+            </p>
+            <pre className="bg-black/50 p-6 text-[10px] font-mono text-primary/80 overflow-x-auto border border-white/5">
+{`-- Create profiles table
+drop table if exists public.profiles;
+
+create table public.profiles (
+  id text primary key, -- Supports Firebase UIDs
+  username text,
+  avatar_url text,
+  bio text,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- Enable RLS
+alter table public.profiles enable row level security;
+
+-- Policies for public profile access
+create policy "Public profiles are viewable by everyone." on profiles for select using (true);
+create policy "Anyone can insert/update profile." on profiles for insert with check (true);
+create policy "Anyone can update profile." on profiles for update using (true);`}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {isSupabaseConfigured && !errorVisible && (
+        <div className="bg-primary/10 border border-primary/50 p-6 flex items-center gap-4 animate-in slide-in-from-top duration-500">
+          <Info className="w-5 h-5 text-primary" />
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">System Active</p>
+            <p className="text-xs text-primary/80">Your profile is active. All information will be synced across your devices.</p>
+          </div>
+        </div>
+      )}
+
       <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-8 border-b border-white/10 pb-12">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <User className="w-5 h-5 text-primary" />
-            <span className="text-xs font-mono text-primary tracking-[0.5em] uppercase">Identity_Terminal</span>
+            <span className="text-xs font-mono text-primary tracking-[0.5em] uppercase">User Settings</span>
           </div>
           <h1 className="text-6xl md:text-8xl font-black uppercase tracking-tighter leading-none italic">
-            Profile_<span className="text-primary">Sync</span>
+            Profile <span className="text-primary italic">Info</span>
           </h1>
         </div>
 
         <div className="flex gap-12">
           <div className="flex flex-col">
-            <span className="text-[8px] font-mono text-white/20 uppercase tracking-widest leading-none mb-2">Auth Level</span>
-            <span className="text-xl font-bold tracking-tighter italic">ADMIN_SYSTEM</span>
+            <span className="text-[8px] font-mono text-white/20 uppercase tracking-widest leading-none mb-2">Account Type</span>
+            <span className="text-xl font-bold tracking-tighter italic">ADMIN</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[8px] font-mono text-white/20 uppercase tracking-widest leading-none mb-2">Sync Status</span>
-            <span className="text-xl font-bold tracking-tighter text-primary italic">OPTIMIZED</span>
+            <span className="text-[8px] font-mono text-white/20 uppercase tracking-widest leading-none mb-2">Status</span>
+            <span className="text-xl font-bold tracking-tighter text-primary italic">ONLINE</span>
           </div>
         </div>
       </header>
@@ -201,7 +320,7 @@ export function ProfilePage() {
                  <div className="absolute inset-0 border border-primary/20 scale-105 opacity-0 group-hover:opacity-100 transition-all duration-500" />
                  <img 
                    src={avatar} 
-                   alt="Identity Signature" 
+                   alt="Profile" 
                    className={`w-full h-full object-cover transition-all duration-700 ${isUploading ? 'opacity-20 grayscale-0' : 'grayscale brightness-75 group-hover:grayscale-0 group-hover:brightness-100'}`}
                  />
                  <div 
@@ -212,12 +331,12 @@ export function ProfilePage() {
                        {isUploading ? (
                          <>
                            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                           <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Syncing...</span>
+                           <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">{uploadProgress}%</span>
                          </>
                        ) : (
                          <>
                            <Camera className="w-8 h-8 text-white" />
-                           <span className="text-[10px] font-black uppercase tracking-[0.3em]">Update_Signature</span>
+                           <span className="text-[10px] font-black uppercase tracking-[0.3em]">Update Photo</span>
                          </>
                        )}
                     </div>
@@ -226,17 +345,21 @@ export function ProfilePage() {
                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 overflow-hidden">
                       <motion.div 
                         initial={{ width: 0 }}
-                        animate={{ width: "100%" }}
-                        transition={{ duration: 2, repeat: Infinity }}
+                        animate={{ width: `${uploadProgress}%` }}
                         className="h-full bg-primary"
                       />
+                   </div>
+                 )}
+                 {errorVisible && !isUploading && (
+                   <div className="absolute top-0 left-0 right-0 bg-red-500/80 p-2 text-[8px] font-black uppercase tracking-tighter text-center">
+                     {errorVisible}
                    </div>
                  )}
               </div>
               
               <div className="space-y-2 text-center lg:text-left">
                  <h2 className="text-3xl font-black uppercase tracking-tighter italic">{username}</h2>
-                 <p className="text-[10px] font-mono text-white/30 uppercase tracking-[0.2em]">Node_Index: #3773-ALPHA</p>
+                 <p className="text-[10px] font-mono text-white/30 uppercase tracking-[0.2em]">User ID: #3773</p>
               </div>
            </div>
 
@@ -246,23 +369,23 @@ export function ProfilePage() {
                 className="w-full py-5 border border-white/10 text-white/40 font-black uppercase tracking-[0.4em] text-[10px] hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-3 group"
               >
                  <Lock className="w-4 h-4" />
-                 <span>Access_Vault</span>
+                 <span>Change Password</span>
                  <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </button>
               
               <div className="p-6 bg-white/[0.02] border border-white/5 space-y-4">
                  <div className="flex items-center gap-2">
                     <Activity className="w-3 h-3 text-primary" />
-                    <span className="text-[8px] font-black uppercase tracking-widest text-white/40 italic">Activity_Digest</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-white/40 italic">Account Activity</span>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                        <span className="text-[10px] font-bold">128H</span>
-                       <p className="text-[8px] font-mono text-white/20 uppercase">Total_Uptime</p>
+                       <p className="text-[8px] font-mono text-white/20 uppercase">Total Time</p>
                     </div>
                     <div className="space-y-1">
                        <span className="text-[10px] font-bold">42</span>
-                       <p className="text-[8px] font-mono text-white/20 uppercase">Sync_Nodes</p>
+                       <p className="text-[8px] font-mono text-white/20 uppercase">Connected Devices</p>
                     </div>
                  </div>
               </div>
@@ -273,26 +396,26 @@ export function ProfilePage() {
         <form onSubmit={handleUpdateProfile} className="lg:col-span-8 bg-black/20 p-12 lg:p-16 space-y-16">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
               <SettingField 
-                label="Identity_Handle"
+                label="Username"
                 value={username}
                 onChange={setUsername}
                 icon={User}
-                placeholder="PRO_GAUGE_NODE"
+                placeholder="Enter Username"
               />
               <SettingField 
-                label="Node_Email"
+                label="Email Address"
                 value={email}
                 onChange={setEmail}
                 icon={Mail}
                 type="email"
-                placeholder="NODE@SYSTEM.NET"
+                placeholder="email@example.com"
               />
            </div>
 
            <div className="space-y-4 group">
               <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 italic group-focus-within:text-primary transition-colors flex items-center gap-2">
                 <Binary className="w-3 h-3" />
-                Tactical_Bio
+                Biography
               </label>
               <textarea 
                 value={bio}
@@ -305,23 +428,23 @@ export function ProfilePage() {
               <div className="space-y-6">
                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 italic flex items-center gap-2">
                     <Globe className="w-3 h-3" />
-                    Regional_Sync
+                    Region
                  </label>
                  <select className="w-full bg-transparent border-b border-white/10 py-4 text-sm font-mono text-white/80 appearance-none focus:outline-none focus:border-white transition-colors cursor-pointer">
-                    <option className="bg-neutral-900">ASIA-SOUTHEAST-1</option>
-                    <option className="bg-neutral-900">US-EAST-2</option>
-                    <option className="bg-neutral-900">EU-WEST-4</option>
+                    <option className="bg-neutral-900">Asia</option>
+                    <option className="bg-neutral-900">North America</option>
+                    <option className="bg-neutral-900">Europe</option>
                  </select>
               </div>
 
               <div className="space-y-6">
                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 italic flex items-center gap-2">
                     <Monitor className="w-3 h-3" />
-                    Display_Mode
+                    Appearance
                  </label>
                  <div className="flex gap-4">
-                    <button type="button" className="flex-1 py-4 bg-white text-black text-[10px] font-black uppercase tracking-widest">Dark_Mode</button>
-                    <button type="button" className="flex-1 py-4 border border-white/10 text-white/40 text-[10px] font-black uppercase tracking-widest hover:border-white hover:text-white transition-all">Light_Node</button>
+                    <button type="button" className="flex-1 py-4 bg-white text-black text-[10px] font-black uppercase tracking-widest">Dark Mode</button>
+                    <button type="button" className="flex-1 py-4 border border-white/10 text-white/40 text-[10px] font-black uppercase tracking-widest hover:border-white hover:text-white transition-all">Light Mode</button>
                  </div>
               </div>
            </div>
@@ -340,7 +463,7 @@ export function ProfilePage() {
                  ) : (
                     <>
                       <Save className="w-4 h-4" />
-                      <span>Commit_Sync</span>
+                      <span>Save Changes</span>
                     </>
                  )}
               </button>
@@ -365,7 +488,7 @@ export function ProfilePage() {
               <div className="p-8 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
                  <div className="flex items-center gap-4 text-primary">
                     <Shield className="w-5 h-5" />
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Security_Vault_Access</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Security Settings</h3>
                  </div>
                  <button onClick={() => setShowVault(false)} className="text-white/20 hover:text-white transition-colors">
                     <X className="w-5 h-5" />
@@ -375,7 +498,7 @@ export function ProfilePage() {
               <form onSubmit={handleUpdatePassword} className="p-12 space-y-12">
                  <div className="space-y-10">
                     <SettingField 
-                      label="Current_Access_Key"
+                      label="Current Password"
                       type="password"
                       value={currentPassword}
                       onChange={setCurrentPassword}
@@ -384,7 +507,7 @@ export function ProfilePage() {
                     />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                       <SettingField 
-                        label="New_Access_Key"
+                        label="New Password"
                         type="password"
                         value={newPassword}
                         onChange={setNewPassword}
@@ -392,7 +515,7 @@ export function ProfilePage() {
                         placeholder="********"
                       />
                       <SettingField 
-                        label="Verify_Key"
+                        label="Verify Password"
                         type="password"
                         value={confirmPassword}
                         onChange={setConfirmPassword}
@@ -408,13 +531,13 @@ export function ProfilePage() {
                       onClick={() => setShowVault(false)}
                       className="py-5 border border-white/10 text-white/40 font-black uppercase tracking-[0.4em] text-[10px] hover:text-white hover:border-white transition-all"
                     >
-                       Abort_Session
+                       Cancel
                     </button>
                     <button 
                       type="submit"
                       className="py-5 bg-white text-black font-black uppercase tracking-[0.4em] text-[10px] hover:bg-primary transition-all"
                     >
-                       Rotate_Key
+                       Update Password
                     </button>
                  </div>
               </form>
@@ -425,11 +548,11 @@ export function ProfilePage() {
 
       <footer className="pt-20 border-t border-white/5 flex flex-col items-center gap-6">
          <div className="flex items-center gap-4 text-[10px] font-mono text-white/20 uppercase tracking-[0.2em]">
-            <span>System_Uptime: 99.9%</span>
+            <span>System Status: Online</span>
             <div className="w-[1px] h-4 bg-white/10" />
-            <span>Identity_Verified</span>
+            <span>Verified</span>
             <div className="w-[1px] h-4 bg-white/10" />
-            <span>AES_256_ENCRYPTED</span>
+            <span>Secure Connection</span>
          </div>
       </footer>
     </div>

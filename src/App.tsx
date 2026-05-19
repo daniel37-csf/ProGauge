@@ -12,17 +12,31 @@ import { ProgressPage } from './pages/ProgressPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
+import { ArchivePage } from './pages/ArchivePage';
 import { LoginPage } from './pages/LoginPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
 import { LandingPage } from './pages/LandingPage';
 import { AnimatePresence, motion } from 'motion/react';
 import { auth, db } from './lib/firebase';
+import { supabase } from './lib/supabase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-type Tab = 'events' | 'progress' | 'library' | 'alerts' | 'profile' | 'admin';
+type Tab = 'events' | 'progress' | 'library' | 'alerts' | 'profile' | 'admin' | 'archive';
 
-function MainLayout({ isAdmin, activeTab, setActiveTab }: { isAdmin: boolean, activeTab: Tab, setActiveTab: (tab: Tab) => void }) {
+function MainLayout({ 
+  isAdmin, 
+  activeTab, 
+  setActiveTab, 
+  avatarUrl, 
+  onAvatarUpdate 
+}: { 
+  isAdmin: boolean, 
+  activeTab: Tab, 
+  setActiveTab: (tab: Tab) => void,
+  avatarUrl: string,
+  onAvatarUpdate: (url: string) => void
+}) {
   const location = useLocation();
   const navigatedRef = useRef(false);
 
@@ -41,9 +55,10 @@ function MainLayout({ isAdmin, activeTab, setActiveTab }: { isAdmin: boolean, ac
     switch (activeTab) {
       case 'events': return <EventsPage />;
       case 'library': return <LibraryPage />;
-      case 'progress': return <ProgressPage />;
+      case 'progress': return <ProgressPage onNavigateToArchive={() => setActiveTab('archive')} />;
+      case 'archive': return <ArchivePage onBack={() => setActiveTab('progress')} />;
       case 'alerts': return <AlertsPage />;
-      case 'profile': return <ProfilePage />;
+      case 'profile': return <ProfilePage onAvatarUpdate={onAvatarUpdate} />;
       case 'admin': return isAdmin ? <AdminPage /> : <EventsPage />;
       default: return <EventsPage />;
     }
@@ -56,6 +71,7 @@ function MainLayout({ isAdmin, activeTab, setActiveTab }: { isAdmin: boolean, ac
         onTabChange={setActiveTab} 
         onLogout={handleLogout} 
         isAdmin={isAdmin}
+        avatarUrl={avatarUrl}
       />
       
       <main className="max-w-[1600px] mx-auto px-6 md:px-12 pt-32 pb-40 md:pt-48 md:pb-32">
@@ -80,7 +96,7 @@ function MainLayout({ isAdmin, activeTab, setActiveTab }: { isAdmin: boolean, ac
           </div>
           <div className="flex flex-col">
             <span className="text-[8px] font-mono text-white/20 uppercase tracking-widest">Encryption</span>
-            <span className="text-[10px] font-bold">RSA_4096</span>
+            <span className="text-[10px] font-bold">Secure</span>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -99,17 +115,36 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('events');
+  const [avatarUrl, setAvatarUrl] = useState<string>('');
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (authUser) {
         setUser(authUser);
+        setAvatarUrl(authUser.photoURL || '');
+        
+        // Fetch additional profile data from Supabase
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', authUser.uid)
+            .single();
+          
+          if (data?.avatar_url) {
+            setAvatarUrl(data.avatar_url);
+          }
+        } catch (err) {
+          console.error('Error fetching profile from Supabase:', err);
+        }
+
         const adminDoc = await getDoc(doc(db, 'admins', authUser.uid));
         const isUserAdmin = adminDoc.exists() || authUser.email?.toLowerCase() === 'drd3773@gmail.com';
         setIsAdmin(isUserAdmin);
       } else {
         setUser(null);
         setIsAdmin(false);
+        setAvatarUrl('');
       }
       setIsInitializing(false);
     });
@@ -125,7 +160,7 @@ export default function App() {
           transition={{ duration: 1.5, repeat: Infinity }}
           className="text-primary font-mono text-xs uppercase tracking-[1em]"
         >
-          Initializing_Node_Sync...
+          Initializing...
         </motion.div>
       </div>
     );
@@ -155,7 +190,15 @@ export default function App() {
         <Route 
           path="/dashboard" 
           element={
-            user ? <MainLayout isAdmin={isAdmin} activeTab={activeTab} setActiveTab={setActiveTab} /> : 
+            user ? (
+              <MainLayout 
+                isAdmin={isAdmin} 
+                activeTab={activeTab} 
+                setActiveTab={setActiveTab} 
+                avatarUrl={avatarUrl}
+                onAvatarUpdate={setAvatarUrl}
+              />
+            ) : 
             <Navigate to="/login" replace />
           } 
         />

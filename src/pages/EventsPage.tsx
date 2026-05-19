@@ -24,8 +24,8 @@ const EVENT_DATA: EventDetail[] = [
     status: 'ACTIVE',
     stats: [
       { label: 'K/D Ratio', value: '2.4' },
-      { label: 'Nodes Captured', value: '12/15' },
-      { label: 'XP Multiplier', value: '1.5x' }
+      { label: 'Objectives', value: '12/15' },
+      { label: 'Experience Bonus', value: '1.5x' }
     ],
     description: 'Covert infiltration mission in the Neo-Berlin industrial sector. High stakes, stealth primary objective.',
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=800'
@@ -81,7 +81,7 @@ export function EventsPage() {
             {/* Featured Events */}
             <section className="grid grid-cols-1 md:grid-cols-12 border-b border-white/10 pb-xl relative">
               <div className="absolute top-0 right-0 hidden lg:block text-[8px] font-mono text-white/30 vertical-text h-full tracking-[0.5em] pointer-events-none">
-                SYSTEM_LOG_PHASE_01_ACTIVE_REF_992.00
+                SYSTEM_LOG_ACTIVE
               </div>
               
               <div className="md:col-span-12 flex flex-col gap-12">
@@ -90,17 +90,17 @@ export function EventsPage() {
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <div className="w-1 h-1 bg-primary animate-ping" />
-                      <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Live Phase 01</span>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Live Events</span>
                     </div>
-                    <span className="text-[10px] font-mono text-white/60 uppercase tracking-widest">Global / 2026 // Active Nodes: 42</span>
+                    <span className="text-[10px] font-mono text-white/60 uppercase tracking-widest">Global / 2026 // Active Users: 42</span>
                   </div>
                   <div className="hidden md:flex gap-12">
                     <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-white/40 uppercase">Network Load</span>
+                      <span className="text-[9px] font-mono text-white/40 uppercase">Server Load</span>
                       <span className="text-sm font-medium">82.4%</span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-white/40 uppercase">Latent Delay</span>
+                      <span className="text-[9px] font-mono text-white/40 uppercase">Latency</span>
                       <span className="text-sm font-medium">12ms</span>
                     </div>
                   </div>
@@ -174,7 +174,7 @@ export function EventsPage() {
                 />
               ))}
               <div className="p-8 flex flex-col justify-between bg-primary text-black cursor-pointer hover:brightness-110 transition-all h-64 md:h-auto">
-                <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">Global Terminal</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">System Records</span>
                 <div className="flex items-center justify-between">
                   <span className="text-xl font-black uppercase">Archives</span>
                   <ArrowRight className="w-6 h-6 stroke-[3]" />
@@ -198,7 +198,7 @@ export function EventsPage() {
                   className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-white/40 hover:text-white transition-colors"
                 >
                   <ArrowRight className="w-4 h-4 rotate-180" />
-                  <span>Return_To_Cluster</span>
+                  <span>Back to Events</span>
                 </button>
                 <div className="flex items-center gap-4">
                   <div className="px-3 py-1 border border-primary/20 bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-widest">
@@ -258,7 +258,7 @@ export function EventsPage() {
 
                   <div className="space-y-6">
                     <div className="flex justify-between items-end">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 italic">Sync Progress</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 italic">Event Progress</span>
                       <span className="text-xl font-mono text-primary">{selectedEvent?.progress}</span>
                     </div>
                     <div className="h-1 bg-white/5 relative">
@@ -276,10 +276,10 @@ export function EventsPage() {
                 <div className="pt-12 space-y-4">
                   <button className="w-full py-5 bg-primary text-black font-black uppercase tracking-[0.3em] text-xs hover:bg-white transition-all flex items-center justify-center gap-4 group">
                     <Shield className="w-4 h-4" />
-                    <span>Initialize_Integration</span>
+                    <span>Join Event</span>
                   </button>
                   <button className="w-full py-5 border border-white/10 text-white/40 font-black uppercase tracking-[0.3em] text-xs hover:border-white hover:text-white transition-all">
-                    System_Log_Access
+                    View Records
                   </button>
                 </div>
               </div>

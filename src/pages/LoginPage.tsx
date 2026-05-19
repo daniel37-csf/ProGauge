@@ -1,4 +1,4 @@
-import { Play, Shield, Lock, ArrowRight, Zap, Terminal, Gamepad2, Chrome, Apple, AlertCircle } from 'lucide-react';
+import { Shield, Lock, ArrowRight, Zap, Gamepad2, Chrome, Apple, AlertCircle, Mail, User } from 'lucide-react';
 import { useState, FormEvent, ReactNode } from 'react';
 import { motion } from 'motion/react';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -62,7 +62,7 @@ export function LoginPage() {
         
         await batch.commit();
       } else {
-        if (!ident) throw new Error('Identification alias required');
+        if (!ident) throw new Error('Email or username required');
         let loginEmail = ident;
         if (!ident.includes('@')) {
           // Attempt username lookup
@@ -73,10 +73,10 @@ export function LoginPage() {
             if (userDoc.exists()) {
               loginEmail = userDoc.data().email;
             } else {
-              throw new Error('User terminal data missing');
+              throw new Error('User profile data missing');
             }
           } else {
-            throw new Error('Identification alias not found');
+            throw new Error('Username not found');
           }
         }
         await signInWithEmailAndPassword(auth, loginEmail, password);
@@ -85,13 +85,13 @@ export function LoginPage() {
     } catch (err: any) {
       let displayError = err.message;
       if (err.code === 'auth/operation-not-allowed') {
-        displayError = 'Authentication handshake failed: Email/Password login is not enabled in Firebase Console.';
+        displayError = 'Login failed: Email/Password login is not enabled.';
       } else if (err.code === 'auth/invalid-credential') {
-        displayError = 'Access Denied: Invalid identification or crypt key.';
+        displayError = 'Access Denied: Invalid email or password.';
       } else if (err.code === 'auth/email-already-in-use') {
-        displayError = 'Terminal already registered for this email.';
+        displayError = 'An account with this email already exists.';
       } else if (err.code === 'auth/weak-password') {
-        displayError = 'Crypt key too weak. Use at least 6 characters.';
+        displayError = 'Password too weak. Use at least 6 characters.';
       }
       setError(displayError);
       
@@ -141,10 +141,10 @@ export function LoginPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center relative overflow-hidden px-6 py-12">
       {/* Background Decor */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-5">
-        <div className="absolute top-10 left-10 text-[10px] font-mono vertical-text tracking-[1em]">SYSTEM_INTRUSION_DETECTED_REF_00x</div>
-        <div className="absolute bottom-10 right-10 text-[10px] font-mono vertical-text tracking-[1em]">HANDSHAKE_PROTOCOL_INITIALIZED</div>
+        <div className="absolute top-10 left-10 text-[10px] font-mono vertical-text tracking-[1em]">SYSTEM ACTIVE REF 001</div>
+        <div className="absolute bottom-10 right-10 text-[10px] font-mono vertical-text tracking-[1em]">SECURE CONNECTION</div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[400px] font-black uppercase tracking-tighter opacity-20 leading-none select-none">
-          {isRegistering ? 'JOIN' : 'SYNC'}
+          {isRegistering ? 'JOIN' : 'HELLO'}
         </div>
       </div>
 
@@ -157,7 +157,7 @@ export function LoginPage() {
         <div className="flex flex-col items-center mb-12">
           <div className="flex items-center gap-2 mb-6">
             <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">
-              {isRegistering ? 'New Node Registration' : 'Secure Access Node'}
+              {isRegistering ? 'New Account Registration' : 'Secure Login'}
             </span>
           </div>
           <h1 className="text-[80px] md:text-[120px] font-black uppercase tracking-tighter leading-[0.8] text-center">
@@ -189,13 +189,13 @@ export function LoginPage() {
             <input 
               required
               type="text" 
-              placeholder={isRegistering ? "EMAIL_ADDRESS" : "EMAIL_OR_ALIAS"}
+              placeholder={isRegistering ? "EMAIL ADDRESS" : "EMAIL OR USERNAME"}
               value={isRegistering ? email : ident}
               onChange={(e) => isRegistering ? setEmail(e.target.value) : setIdent(e.target.value)}
               className="w-full bg-transparent border border-white/20 p-6 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-primary transition-colors placeholder:text-white/40"
             />
             <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-20 group-focus-within:opacity-100 transition-opacity">
-              <Terminal className="w-4 h-4 text-primary" />
+              <Mail className="w-4 h-4 text-primary" />
             </div>
           </div>
 
@@ -208,13 +208,13 @@ export function LoginPage() {
               <input 
                 required
                 type="text" 
-                placeholder="USER_ALIAS"
+                placeholder="USERNAME"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-transparent border border-white/20 p-6 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-primary transition-colors placeholder:text-white/40"
               />
               <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-20 group-focus-within:opacity-100 transition-opacity">
-                <Play className="w-4 h-4 text-primary rotate-[-90deg]" />
+                <User className="w-4 h-4 text-primary rotate-[-90deg]" />
               </div>
             </motion.div>
           )}
@@ -223,10 +223,10 @@ export function LoginPage() {
             <input 
               required
               type="password" 
-              placeholder="ACCESS_CRYPT"
+              placeholder="PASSWORD"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-transparent border border-white/20 p-6 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-primary transition-colors placeholder:text-white/40"
+              className="w-full bg-transparent border border-white/20 p-6 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-primary transition-all placeholder:text-white/40"
             />
             <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-20 group-focus-within:opacity-100 transition-opacity">
               <Lock className="w-4 h-4 text-primary" />
@@ -242,10 +242,10 @@ export function LoginPage() {
               <input 
                 required
                 type="password" 
-                placeholder="RE_ENTER_CRYPT"
+                placeholder="CONFIRM PASSWORD"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-transparent border border-white/20 p-6 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-primary transition-colors placeholder:text-white/40"
+                className="w-full bg-transparent border border-white/20 p-6 text-sm font-mono uppercase tracking-widest focus:outline-none focus:border-primary transition-all placeholder:text-white/40"
               />
               <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-20 group-focus-within:opacity-100 transition-opacity">
                 <Shield className="w-4 h-4 text-primary" />
@@ -266,7 +266,7 @@ export function LoginPage() {
               </motion.div>
             ) : (
               <>
-                <span>{isRegistering ? 'Confirm Registration' : 'Initialize Node'}</span>
+                <span>{isRegistering ? 'Confirm Registration' : 'Login'}</span>
                 <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform stroke-[3]" />
               </>
             )}
@@ -276,19 +276,19 @@ export function LoginPage() {
         <div className="mt-8 flex flex-col items-center gap-4">
           <button 
             onClick={() => setIsRegistering(!isRegistering)}
-            className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/60 hover:text-primary transition-colors"
+            className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/60 hover:text-primary transition-all"
           >
             {isRegistering 
-              ? 'Return to Access Hub' 
-              : 'Create New Identification Node'}
+              ? 'Back to Login' 
+              : 'Create New Account'}
           </button>
           
           <button 
             onClick={() => navigate('/admin/login')}
-            className="text-[9px] font-mono text-white/20 hover:text-red-500 uppercase tracking-[0.5em] transition-colors mt-4 flex items-center gap-2"
+            className="text-[9px] font-mono text-white/20 hover:text-red-500 uppercase tracking-[0.5em] transition-all mt-4 flex items-center gap-2"
           >
             <Shield className="w-3 h-3" />
-            <span>Administrator Portal Access</span>
+            <span>Admin Login Portal</span>
           </button>
         </div>
 
@@ -308,7 +308,7 @@ export function LoginPage() {
       <div className="absolute bottom-10 w-full px-12 flex justify-between items-end text-[9px] font-mono text-white/30 uppercase tracking-widest pointer-events-none">
         <div className="flex flex-col">
           <span>Local Node: 45.72 N / 122.41 W</span>
-          <span className="mt-1">Handshake: RSA_4096</span>
+          <span className="mt-1">Handshake: Secure</span>
         </div>
         <span>© 2026 PRO-GAUGE INTNL.</span>
       </div>

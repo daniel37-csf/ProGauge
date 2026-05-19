@@ -32,7 +32,7 @@ export function AdminLoginPage() {
       if (!adminDoc.exists() && !isMasterEmail) {
         console.warn(`Admin access denied. Current: ${userEmail}, Token: ${cleanToken}, Expected: ${masterEmail}`);
         await auth.signOut();
-        throw new Error('ELEVATED_PRIVILEGES_REQUIRED: ACCESS_DENIED');
+        throw new Error('Admin Access Required');
       }
       
       // If we are bootstrapping the admin, we might want to create the doc
@@ -58,13 +58,13 @@ export function AdminLoginPage() {
     } catch (err: any) {
       let displayError = err.message;
       if (err.code === 'auth/operation-not-allowed') {
-        displayError = 'Authentication handshake failed: Email/Password login is not enabled in Firebase Console.';
+        displayError = 'Login failed: Email/Password login is not enabled.';
       } else if (err.code === 'auth/invalid-credential') {
-        displayError = 'ACCESS_DENIED: Invalid Admin_Terminal_ID or Master_Crypt_Key.';
+        displayError = 'Access Denied: Invalid Admin ID or Master Password.';
       } else if (err.code === 'auth/user-not-found') {
-        displayError = 'NODE_NOT_FOUND: This Admin_Terminal_ID does not exist.';
+        displayError = 'Account Not Found: This Admin ID does not exist.';
       } else if (err.code === 'auth/wrong-password') {
-        displayError = 'CRYPT_KEY_REJECTED: Incorrect Master_Crypt_Key.';
+        displayError = 'Incorrect Password: Check your master password.';
       }
       setError(displayError);
       handleFirestoreError(err, OperationType.GET, 'admins');
@@ -90,13 +90,13 @@ export function AdminLoginPage() {
                 opacity: 0.1 + (i % 5) * 0.1
               }}
             >
-              {Array.from({ length: 50 }).map(() => 'ADMIN_OVERRIDE_REQUIRED ').join('')}
+              {Array.from({ length: 50 }).map(() => 'ADMIN ACCESS ONLY ').join('')}
             </div>
           ))}
         </div>
 
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[300px] font-black uppercase tracking-tighter opacity-5 leading-none select-none border-red-500 border-4 px-20">
-          ROOT
+          ADMIN
         </div>
       </div>
 
@@ -110,9 +110,9 @@ export function AdminLoginPage() {
             <Shield className="w-8 h-8 text-red-500" />
           </div>
           <h1 className="text-4xl font-black uppercase tracking-widest text-center">
-            Restrict<span className="text-red-500">e</span>d Zone
+            Admin Access
           </h1>
-          <p className="mt-4 text-[10px] font-mono text-red-500/50 uppercase tracking-[0.4em]">Level 04 Auth Required</p>
+          <p className="mt-4 text-[10px] font-mono text-red-500/50 uppercase tracking-[0.4em]">Authorized Access Only</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
@@ -127,7 +127,7 @@ export function AdminLoginPage() {
             </motion.div>
           )}
           <div className="relative group">
-            <div className="absolute -top-3 left-6 px-2 bg-black text-[9px] font-mono text-red-500/60 uppercase tracking-widest z-20">Admin_Terminal_ID</div>
+            <div className="absolute -top-3 left-6 px-2 bg-black text-[9px] font-mono text-red-500/60 uppercase tracking-widest z-20">Admin ID</div>
             <input 
               required
               type="text" 
@@ -140,7 +140,7 @@ export function AdminLoginPage() {
           </div>
 
           <div className="relative group">
-            <div className="absolute -top-3 left-6 px-2 bg-black text-[9px] font-mono text-red-500/60 uppercase tracking-widest z-20">Master_Crypt_Key</div>
+            <div className="absolute -top-3 left-6 px-2 bg-black text-[9px] font-mono text-red-500/60 uppercase tracking-widest z-20">Master Password</div>
             <input 
               required
               type="password" 
@@ -163,7 +163,7 @@ export function AdminLoginPage() {
             ) : (
               <>
                 <AlertTriangle className="w-5 h-5" />
-                <span>Override Core</span>
+                <span>Admin Login</span>
                 <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform stroke-[3]" />
               </>
             )}
@@ -175,12 +175,12 @@ export function AdminLoginPage() {
           className="mt-8 w-full py-4 text-[10px] font-bold uppercase tracking-[0.3em] text-white/20 hover:text-white transition-colors flex items-center justify-center gap-2"
         >
           <ArrowRight className="w-4 h-4 rotate-180" />
-          <span>Abort Admin Protocol</span>
+          <span>Back to User Login</span>
         </button>
       </motion.div>
       
       <div className="mt-12 text-[9px] font-mono text-red-500/20 uppercase tracking-[0.5em] text-center max-w-sm">
-        WARNING: UNOTHORIZED ACCESS TO THE CORE DIRECTIVE AT THIS LEVEL IS A VIOLATION OF PROTOCOL 42-A. TRACING IS ACTIVE.
+        WARNING: UNAUTHORIZED ACCESS AT THIS LEVEL IS PROHIBITED. TRACING IS ACTIVE.
       </div>
     </div>
   );
