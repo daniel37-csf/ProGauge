@@ -32,18 +32,7 @@ export const supabase = isSupabaseConfigured
           };
         }
         
-        if (prop === 'auth') {
-          return {
-            getSession: () => Promise.resolve({ data: { session: null }, error: new Error('Supabase not configured') }),
-            onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-            signInWithPassword: () => Promise.resolve({ data: {}, error: new Error('Supabase not configured') }),
-            signUp: () => Promise.resolve({ data: {}, error: new Error('Supabase not configured') }),
-            signOut: () => Promise.resolve({ error: null }),
-            signInWithOAuth: () => Promise.resolve({ data: {}, error: new Error('Supabase not configured') }),
-          };
-        }
-        
-        // Default behavior for other properties (like .from) 
+        // Default behavior for other properties (like .from, .auth) 
         // return a function that returns a dummy object with chainable methods
         return (...args: any[]) => {
           console.error(`Supabase error: Attempted to access "${String(prop)}" but Supabase is not configured.`);

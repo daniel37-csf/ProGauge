@@ -6,26 +6,26 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-serif: "Playfair Display", serif;
   
-  --color-background: var(--bg-base);
-  --color-surface-dim: var(--bg-dim);
-  --color-surface-bright: var(--bg-bright);
-  --color-surface-container-lowest: var(--bg-lowest);
-  --color-surface-container-low: var(--bg-low);
-  --color-surface-container: var(--bg-container);
-  --color-surface-container-high: var(--bg-high);
-  --color-surface-container-highest: var(--bg-highest);
-  --color-on-surface: var(--fg-base);
+  --color-background: var(--bg);
+  --color-surface-dim: var(--surface-dim);
+  --color-surface-bright: var(--surface-bright);
+  --color-surface-container-lowest: var(--surface-lowest);
+  --color-surface-container-low: var(--surface-low);
+  --color-surface-container: var(--surface);
+  --color-surface-container-high: var(--surface-high);
+  --color-surface-container-highest: var(--surface-highest);
+  --color-on-surface: var(--fg);
   --color-on-surface-variant: var(--fg-variant);
-  --color-outline: var(--outline-base);
-  --color-outline-variant: var(--outline-variant);
-  --color-primary: #F0FF42;
-  --color-on-primary: #000000;
-  --color-primary-container: #F0FF42;
-  --color-on-primary-container: #000000;
-  --color-secondary: var(--color-sec);
-  --color-on-secondary: var(--color-on-sec);
-  --color-secondary-container: var(--color-sec-container);
-  --color-tertiary: #F0FF42;
+  --color-outline: var(--border);
+  --color-outline-variant: var(--border-variant);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
+  --color-secondary: var(--secondary);
+  --color-on-secondary: var(--on-secondary);
+  --color-secondary-container: var(--secondary-container);
+  --color-tertiary: var(--primary);
   
   --radius-sm: 0px;
   --radius-DEFAULT: 0px;
@@ -42,43 +42,94 @@
   }
 }
 
-@layer base {
-  :root {
-    --bg-base: #FFFFFF;
-    --bg-dim: #F5F5F5;
-    --bg-bright: #FFFFFF;
-    --bg-lowest: #FFFFFF;
-    --bg-low: #F0F0F0;
-    --bg-container: #FAFAFA;
-    --bg-high: #E5E5E5;
-    --bg-highest: #D4D4D4;
-    --fg-base: #000000;
-    --fg-variant: rgba(0, 0, 0, 0.9);
-    --outline-base: rgba(0, 0, 0, 0.2);
-    --outline-variant: rgba(0, 0, 0, 0.4);
-    --color-sec: #000000;
-    --color-on-sec: #FFFFFF;
-    --color-sec-container: #E0E0E0;
-  }
-
-  .dark {
-    --bg-base: #0A0A0A;
-    --bg-dim: #0A0A0A;
-    --bg-bright: #1A1A1A;
-    --bg-lowest: #000000;
-    --bg-low: #050505;
-    --bg-container: #0A0A0A;
-    --bg-high: #111111;
-    --bg-highest: #1A1A1A;
-    --fg-base: #FFFFFF;
-    --fg-variant: rgba(255, 255, 255, 0.9);
-    --outline-base: rgba(255, 255, 255, 0.2);
-    --outline-variant: rgba(255, 255, 255, 0.4);
-    --color-sec: #FFFFFF;
-    --color-on-sec: #000000;
-    --color-sec-container: #222222;
-  }
+:root {
+  --bg: #0A0A0A;
+  --fg: #FFFFFF;
+  --fg-variant: rgba(255, 255, 255, 0.9);
+  --surface-dim: #0A0A0A;
+  --surface-bright: #1A1A1A;
+  --surface-lowest: #000000;
+  --surface-low: #050505;
+  --surface: #0A0A0A;
+  --surface-high: #111111;
+  --surface-highest: #1A1A1A;
+  --border: rgba(255, 255, 255, 0.2);
+  --border-variant: rgba(255, 255, 255, 0.4);
+  --primary: #F0FF42;
+  --on-primary: #000000;
+  --primary-container: #F0FF42;
+  --on-primary-container: #000000;
+  --secondary: #FFFFFF;
+  --on-secondary: #000000;
+  --secondary-container: #222222;
 }
+
+.light {
+  --bg: #F8F8F8;
+  --fg: #0A0A0A;
+  --fg-variant: rgba(0, 0, 0, 0.7);
+  --surface-dim: #F0F0F0;
+  --surface-bright: #FFFFFF;
+  --surface-lowest: #FFFFFF;
+  --surface-low: #FAFAFA;
+  --surface: #F8F8F8;
+  --surface-high: #EAEAEA;
+  --surface-highest: #E0E0E0;
+  --border: rgba(0, 0, 0, 0.1);
+  --border-variant: rgba(0, 0, 0, 0.2);
+  --primary: #3D44FF;
+  --on-primary: #FFFFFF;
+  --primary-container: #3D44FF;
+  --on-primary-container: #FFFFFF;
+  --secondary: #0A0A0A;
+  --on-secondary: #FFFFFF;
+  --secondary-container: #E0E0E0;
+}
+
+.cyber {
+  --bg: #05020D;
+  --fg: #00FF9C;
+  --fg-variant: #B5FFD9;
+  --surface-dim: #05020D;
+  --surface-bright: #110B25;
+  --surface-lowest: #000000;
+  --surface-low: #0A041A;
+  --surface: #05020D;
+  --surface-high: #1A0D3D;
+  --surface-highest: #2D1466;
+  --border: rgba(0, 255, 156, 0.3);
+  --border-variant: rgba(0, 255, 156, 0.6);
+  --primary: #FF00E5;
+  --on-primary: #FFFFFF;
+  --primary-container: #FF00E5;
+  --on-primary-container: #FFFFFF;
+  --secondary: #00FF9C;
+  --on-secondary: #000000;
+  --secondary-container: #110B25;
+}
+
+.obsidian {
+  --bg: #0F1115;
+  --fg: #E2E4E9;
+  --fg-variant: #9499A1;
+  --surface-dim: #0F1115;
+  --surface-bright: #1C1F26;
+  --surface-lowest: #08090B;
+  --surface-low: #0C0E12;
+  --surface: #0F1115;
+  --surface-high: #252932;
+  --surface-highest: #30363F;
+  --border: rgba(226, 228, 233, 0.1);
+  --border-variant: rgba(226, 228, 233, 0.2);
+  --primary: #818CF8;
+  --on-primary: #FFFFFF;
+  --primary-container: #818CF8;
+  --on-primary-container: #FFFFFF;
+  --secondary: #E2E4E9;
+  --on-secondary: #000000;
+  --secondary-container: #1C1F26;
+}
+
 
 .animate-carousel {
   animation: carousel 30s linear infinite;

@@ -91,26 +91,26 @@ export function AlertsPage() {
   const selectedAlert = notifications.find(n => n.id === selectedId);
 
   return (
-    <div className="space-y-xl animate-in fade-in duration-700 max-w-5xl mx-auto pb-12 relative">
-      <div className="absolute top-0 right-[-100px] hidden xl:block text-[8px] font-mono text-white/5 vertical-text h-full tracking-[1em] pointer-events-none">
+    <div className="space-y-xl animate-in fade-in duration-700 max-w-5xl mx-auto pb-12 relative text-on-surface">
+      <div className="absolute top-0 right-[-100px] hidden xl:block text-[8px] font-mono text-on-surface/5 vertical-text h-full tracking-[1em] pointer-events-none">
         SIGNAL_PREFERENCE_LOADED
       </div>
 
-      <div className="border-b border-white/10 pb-12 flex flex-col md:flex-row justify-between items-end gap-12">
+      <div className="border-b border-outline/10 pb-12 flex flex-col md:flex-row justify-between items-end gap-12">
         <div className="max-w-xl">
           <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">Notification Center</span>
           <h2 className="text-[80px] md:text-[100px] lg:text-[140px] leading-[0.7] font-black uppercase tracking-tighter mt-4 transition-all">Alerts</h2>
-          <p className="text-white/60 font-serif italic text-lg md:text-xl mt-8 max-w-xs leading-tight">
+          <p className="text-on-surface/60 font-serif italic text-lg md:text-xl mt-8 max-w-xs leading-tight">
             Manage account notifications and system alerts.
           </p>
         </div>
         <div className="hidden lg:flex flex-col items-end gap-2 text-right">
-          <span className="text-[10px] font-mono text-white/40 uppercase tracking-[0.3em]">Network Status</span>
+          <span className="text-[10px] font-mono text-on-surface/40 uppercase tracking-[0.3em]">Network Status</span>
           <span className="text-4xl font-mono font-light italic text-primary">Online</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/10 border border-white/10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-outline/10 border border-outline/10">
         <section className="bg-background p-12 flex flex-col gap-12">
           <div className="flex items-center gap-4">
             <Calendar className="w-5 h-5 text-primary" />
@@ -123,7 +123,7 @@ export function AlertsPage() {
           </div>
         </section>
 
-        <section className="bg-background p-12 flex flex-col gap-12 lg:border-l border-white/10">
+        <section className="bg-background p-12 flex flex-col gap-12 lg:border-l border-outline/10">
           <div className="flex items-center gap-4">
             <TrendingUp className="w-5 h-5 text-primary" />
             <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Activity Updates</h3>
@@ -137,43 +137,43 @@ export function AlertsPage() {
       </div>
 
       {/* Notification Inbox */}
-      <section className="border border-white/10 bg-background overflow-hidden relative min-h-[400px]">
-        <div className="p-8 border-b border-white/10 flex justify-between items-center bg-white/[0.02]">
+      <section className="border border-outline/10 bg-background overflow-hidden relative min-h-[400px]">
+        <div className="p-8 border-b border-outline/10 flex justify-between items-center bg-on-surface/[0.02]">
           <div className="flex items-center gap-4">
             <Bell className="w-5 h-5 text-primary" />
             <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Inbox</h3>
           </div>
           <button 
             onClick={markAllRead}
-            className="text-[9px] font-bold uppercase tracking-widest text-white/40 hover:text-primary transition-colors flex items-center gap-2"
+            className="text-[9px] font-bold uppercase tracking-widest text-on-surface/40 hover:text-primary transition-colors flex items-center gap-2"
           >
             <MailOpen className="w-3 h-3" /> Mark Read
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 divide-x divide-white/10">
-          <div className="lg:col-span-12 flex flex-col divide-y divide-white/5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 divide-x divide-outline/10">
+          <div className="lg:col-span-12 flex flex-col divide-y divide-outline/5">
             <AnimatePresence initial={false}>
               {notifications.map((n) => (
                 <div key={n.id}>
                   <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className={`p-8 flex items-center justify-between group hover:bg-white/[0.03] transition-all cursor-pointer ${!n.read ? 'bg-primary/5 border-l-2 border-primary' : ''} ${selectedId === n.id ? 'bg-white/5' : ''}`}
+                    className={`p-8 flex items-center justify-between group hover:bg-on-surface/[0.03] transition-all cursor-pointer ${!n.read ? 'bg-primary/5 border-l-2 border-primary' : ''} ${selectedId === n.id ? 'bg-on-surface/5' : ''}`}
                     onClick={() => setSelectedId(selectedId === n.id ? null : n.id)}
                   >
                     <div className="flex flex-col">
                       <div className="flex items-center gap-3">
-                        <span className={`text-[8px] font-mono uppercase tracking-[0.3em] ${n.read ? 'text-white/30' : 'text-primary'}`}>{n.type}</span>
+                        <span className={`text-[8px] font-mono uppercase tracking-[0.3em] ${n.read ? 'text-on-surface/30' : 'text-primary'}`}>{n.type}</span>
                         {!n.read && <div className="w-1 h-1 rounded-full bg-primary animate-pulse" />}
                       </div>
-                      <span className={`text-xl font-black uppercase mt-2 tracking-tight ${n.read ? 'text-white/60' : 'text-white'}`}>{n.title}</span>
+                      <span className={`text-xl font-black uppercase mt-2 tracking-tight ${n.read ? 'text-on-surface/60' : 'text-on-surface'}`}>{n.title}</span>
                     </div>
                     <div className="flex items-center gap-8">
-                      <span className="text-[9px] font-mono text-white/20 uppercase group-hover:text-white/40 transition-colors">{n.time}</span>
+                      <span className="text-[9px] font-mono text-on-surface/20 uppercase group-hover:text-on-surface/40 transition-colors">{n.time}</span>
                       <button 
                         onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
-                        className="opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-500 transition-all p-2"
+                        className="opacity-0 group-hover:opacity-100 text-on-surface/20 hover:text-red-500 transition-all p-2"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -187,9 +187,9 @@ export function AlertsPage() {
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden bg-black/40"
+                        className="overflow-hidden bg-on-surface/5"
                       >
-                         <div className="p-12 border-t border-white/5 space-y-8">
+                         <div className="p-12 border-t border-outline/5 space-y-8">
                             <div className="flex items-center gap-4 text-primary">
                                <Terminal className="w-4 h-4" />
                                <span className="text-[10px] font-bold uppercase tracking-[0.3em]">Details</span>
@@ -197,17 +197,17 @@ export function AlertsPage() {
                             <div className="space-y-4 font-mono">
                                {n.logs.map((log, i) => (
                                  <div key={i} className="flex gap-8 group/log">
-                                    <span className="text-[10px] text-white/20 group-hover/log:text-white/40 transition-colors">[{log.timestamp}]</span>
-                                    <span className="text-[11px] text-white/60 flex-grow italic">{log.message}</span>
+                                    <span className="text-[10px] text-on-surface/20 group-hover/log:text-on-surface/40 transition-colors">[{log.timestamp}]</span>
+                                    <span className="text-[11px] text-on-surface/60 flex-grow italic">{log.message}</span>
                                     <span className="text-[10px] text-primary/40 group-hover/log:text-primary transition-colors">{log.code}</span>
                                  </div>
                                ))}
                             </div>
                             <div className="pt-8 grid grid-cols-2 gap-4">
-                               <button className="py-4 border border-white/10 text-[9px] font-black uppercase tracking-[0.3em] text-white/40 hover:text-white hover:border-white transition-all">
+                               <button className="py-4 border border-outline/10 text-[9px] font-black uppercase tracking-[0.3em] text-on-surface/40 hover:text-on-surface hover:border-on-surface transition-all">
                                   Trace Route
                                </button>
-                               <button className="py-4 bg-white/5 text-[9px] font-black uppercase tracking-[0.3em] text-white/80 hover:bg-white hover:text-black transition-all">
+                               <button className="py-4 bg-on-surface/5 text-[9px] font-black uppercase tracking-[0.3em] text-on-surface/80 hover:bg-on-surface hover:text-background transition-all">
                                   Dismiss
                                </button>
                             </div>
@@ -220,8 +220,8 @@ export function AlertsPage() {
             </AnimatePresence>
             {notifications.length === 0 && (
               <div className="p-32 flex flex-col items-center justify-center grayscale opacity-10 space-y-6">
-                <Shield className="w-16 h-16" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.4em]">No Notifications</span>
+                <Shield className="w-16 h-16 text-on-surface" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-on-surface">No Notifications</span>
               </div>
             )}
           </div>
@@ -229,26 +229,28 @@ export function AlertsPage() {
       </section>
 
       <div className="flex justify-end pt-12">
-        <button className="bg-white text-black font-black uppercase tracking-[0.4em] px-16 py-6 text-sm hover:bg-primary transition-all active:scale-95 shadow-xl shadow-primary/20">
+        <button className="bg-on-surface text-background font-black uppercase tracking-[0.4em] px-16 py-6 text-sm hover:bg-primary transition-all active:scale-95 shadow-xl shadow-primary/20">
           Save Settings
         </button>
       </div>
     </div>
+
   );
 }
 
 function ToggleRow({ label, enabled, onToggle }: { label: string; enabled: boolean; onToggle: () => void }) {
   return (
-    <div className="flex justify-between items-center py-5 border-b border-white/5 hover:bg-white/5 px-4 transition-colors group cursor-pointer" onClick={onToggle}>
-      <span className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-colors ${enabled ? 'text-white' : 'text-white/30 group-hover:text-white/60'}`}>{label}</span>
+    <div className="flex justify-between items-center py-5 border-b border-outline/5 hover:bg-on-surface/5 px-4 transition-colors group cursor-pointer" onClick={onToggle}>
+      <span className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-colors ${enabled ? 'text-on-surface' : 'text-on-surface/30 group-hover:text-on-surface/60'}`}>{label}</span>
       <button 
-        className={`w-12 h-6 border transition-all duration-300 flex items-center px-1 ${enabled ? 'bg-primary border-primary' : 'bg-transparent border-white/20'}`}
+        className={`w-12 h-6 border transition-all duration-300 flex items-center px-1 ${enabled ? 'bg-primary border-primary' : 'bg-transparent border-outline/20'}`}
       >
         <motion.div 
           animate={{ x: enabled ? 22 : 0 }}
-          className={`w-4 h-4 ${enabled ? 'bg-black' : 'bg-white/20'}`}
+          className={`w-4 h-4 ${enabled ? 'bg-background' : 'bg-on-surface/20'}`}
         />
       </button>
     </div>
   );
 }
+

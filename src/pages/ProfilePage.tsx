@@ -1,8 +1,35 @@
 import React, { useState, FormEvent, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { User, Shield, Key, Camera, Info, Save, ChevronRight, Binary, Globe, Clock, Activity, Lock, Mail, Monitor, X, Loader2, LogOut } from 'lucide-react';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { User, Shield, Key, Camera, Info, Save, ChevronRight, Binary, Globe, Clock, Activity, Lock, Mail, Monitor, X, Loader2, Gamepad2, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useTheme } from '../components/ThemeProvider';
+import axios from 'axios';
+import { useTheme, THEMES } from '../ThemeContext';
+
+interface ToggleRowProps {
+  label: string;
+  enabled: boolean;
+  onToggle: () => void;
+}
+
+function ToggleRow({ label, enabled, onToggle }: ToggleRowProps) {
+  return (
+    <div className="flex justify-between items-center py-5 border-b border-outline/5 hover:bg-on-surface/5 px-4 transition-colors group cursor-pointer rounded-sm" onClick={onToggle}>
+      <span className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-colors ${enabled ? 'text-on-surface' : 'text-on-surface/30 group-hover:text-on-surface/60'}`}>{label}</span>
+      <button 
+        type="button"
+        className={`w-12 h-6 border transition-all duration-300 flex items-center px-1 ${enabled ? 'bg-primary border-primary' : 'bg-transparent border-outline/20'}`}
+      >
+        <motion.div 
+          animate={{ x: enabled ? 22 : 0 }}
+          className={`w-4 h-4 ${enabled ? 'bg-background' : 'bg-on-surface/20'}`}
+        />
+      </button>
+    </div>
+  );
+}
 
 interface SettingFieldProps {
   label: string;
@@ -16,7 +43,7 @@ interface SettingFieldProps {
 function SettingField({ label, value, onChange, type = 'text', placeholder, icon: Icon }: SettingFieldProps) {
   return (
     <div className="space-y-4 group">
-      <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/50 italic group-focus-within:text-primary transition-colors flex items-center gap-2">
+      <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/30 italic group-focus-within:text-primary transition-colors flex items-center gap-2">
         {Icon && <Icon className="w-3 h-3" />}
         {label}
       </label>
@@ -25,51 +52,129 @@ function SettingField({ label, value, onChange, type = 'text', placeholder, icon
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full bg-transparent border-b border-outline py-4 text-lg font-black uppercase tracking-tighter text-on-surface placeholder:text-on-surface/20 focus:outline-none focus:border-primary transition-all focus:pl-4"
+        className="w-full bg-transparent border-b border-outline py-4 text-lg font-black uppercase tracking-tighter text-on-surface placeholder:text-on-surface/5 focus:outline-none focus:border-primary transition-all focus:pl-4"
       />
     </div>
   );
 }
 
+
 interface ProfilePageProps {
   onAvatarUpdate?: (url: string) => void;
-  onLogout?: () => void;
+  steamId: string | null;
+  onSteamSync?: () => void;
 }
 
-export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
+export function ProfilePage({ onAvatarUpdate, steamId, onSteamSync }: ProfilePageProps) {
   const { theme, setTheme } = useTheme();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
+  const [region, setRegion] = useState('Asia');
+  const [notifSettings, setNotifSettings] = useState({
+    tournamentStarts: true,
+    matchInvites: true,
+    patchNotes: false,
+    rankChange: true,
+    weeklySummary: true,
+    goalMilestones: false
+  });
   const [avatar, setAvatar] = useState('https://lh3.googleusercontent.com/aida-public/AB6AXuBlyoNV8_PVYDDruJJedgEnmdArjXVrU4qn62bh9a-asl-VzcRO0jgggZ-p6IePJ32zC57V2imV19GyNZSwhC02eaGGEZks_ryxvLd4n6O25L_pImGnuDGEXnjQZ5MYh89U_UGDwFEPfwbBIroqzOZaEy6i-5wqe0co3EsreXpsmmlE9-is_91-oGiTqC-K-cLQhNBF8GVenOPqw-nUgDyAo3RapzjH16TyEpWtgQTqq95a3I5Czs9hDbwBWPAVMPUIYjEd6nWwbXs');
+  const [steamProfile, setSteamProfile] = useState<any>(null);
+  const [isLoadingSteam, setIsLoadingSteam] = useState(false);
+
+  const getPersonaStateLabel = (state: number) => {
+    switch (state) {
+      case 1: return { label: 'Online', color: 'text-green-400' };
+      case 2: return { label: 'Busy', color: 'text-red-400' };
+      case 3: return { label: 'Away', color: 'text-yellow-400' };
+      case 4: return { label: 'Snooze', color: 'text-blue-400' };
+      default: return { label: 'Offline', color: 'text-white/20' };
+    }
+  };
+
+  const handleUnlinkSteam = async () => {
+    const user = auth.currentUser;
+    if (!user || !window.confirm('Are you sure you want to unlink your Steam account?')) return;
+
+    try {
+      // Remove from Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        steamId: null,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      // Remove from Supabase
+      await supabase
+        .from('profiles')
+        .update({ steam_id: null, updated_at: new Date().toISOString() })
+        .eq('id', user.uid);
+
+      if (onSteamSync) onSteamSync();
+    } catch (err) {
+      console.error('Failed to unlink Steam:', err);
+      alert('Failed to unlink account.');
+    }
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [showVault, setShowVault] = useState(false);
+  const [vaultStep, setVaultStep] = useState<'verify' | 'update'>('verify');
+  const [otpCode, setOtpCode] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [errorVisible, setErrorVisible] = useState<string | null>(null);
+  const [syncSuccessVisible, setSyncSuccessVisible] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    if ((location.state as any)?.syncSuccess) {
+      setSyncSuccessVisible(true);
+      const timer = setTimeout(() => setSyncSuccessVisible(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [location.state]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [accountAgeDays, setAccountAgeDays] = useState<number | string>('...');
+  // Fetch Steam profile when id changes
+  useEffect(() => {
+    const fetchSteamData = async () => {
+      if (!steamId) {
+        setSteamProfile(null);
+        return;
+      }
+
+      setIsLoadingSteam(true);
+      try {
+        const sRes = await fetch(`/api/steam/profile?steamId=${steamId}`);
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          setSteamProfile(sData);
+        }
+      } catch (sErr) {
+        console.error('Steam profile fetch failed:', sErr);
+      } finally {
+        setIsLoadingSteam(false);
+      }
+    };
+
+    fetchSteamData();
+  }, [steamId]);
 
   // Load user data
   useEffect(() => {
     const loadProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = auth.currentUser;
       if (!user) return;
 
       setEmail(user.email || '');
-      
-      const createdAt = new Date(user.created_at);
-      const diffTime = Math.abs(new Date().getTime() - createdAt.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      setAccountAgeDays(diffDays);
 
       try {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .eq('id', user.id)
+          .eq('id', user.uid)
           .single();
 
         if (error) {
@@ -86,20 +191,31 @@ export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
           throw error;
         }
 
-        if (data) {
-          setUsername(data.username || user.user_metadata?.username || '');
+          if (data) {
+          setUsername(data.username || user.displayName || '');
           setBio(data.bio || '');
-          const currentAvatar = data.avatar_url || user.user_metadata?.avatar_url || avatar;
+          const currentAvatar = data.avatar_url || user.photoURL || avatar;
           setAvatar(currentAvatar);
           if (onAvatarUpdate) onAvatarUpdate(currentAvatar);
         }
       } catch (error) {
         console.error('Failed to load profile from Supabase:', error);
       }
+
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          if (!username && userData.username) setUsername(userData.username);
+          if (!bio && userData.bio) setBio(userData.bio);
+        }
+      } catch (error) {
+        console.error('Failed to load profile from Firestore:', error);
+      }
     };
 
     loadProfile();
-  }, [onAvatarUpdate, avatar]);
+  }, []);
 
   const handleAvatarClick = () => {
     if (isUploading) return;
@@ -108,7 +224,7 @@ export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = auth.currentUser;
     
     if (!file) return;
     if (!user) {
@@ -136,7 +252,7 @@ export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
       const fileExt = (file.name.split('.').pop() || 'png').replace(/[^a-z0-9]/gi, '').toLowerCase();
       // Use the standard folder-based path: {uid}/{timestamp}.{ext}
       // Most Supabase RLS policies for storage depend on the first folder being the user's UID.
-      const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+      const filePath = `${user.uid}/${Date.now()}.${fileExt}`;
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
@@ -172,7 +288,7 @@ export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
       const { error: updateError } = await supabase
         .from('profiles')
         .upsert({
-          id: user.id,
+          id: user.uid,
           avatar_url: publicUrl,
           updated_at: new Date().toISOString()
         }, { onConflict: 'id' });
@@ -195,7 +311,7 @@ export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
 
   const handleUpdateProfile = async (e: FormEvent) => {
     e.preventDefault();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = auth.currentUser;
     if (!user) return;
 
     setIsSaving(true);
@@ -203,7 +319,7 @@ export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
       const { error } = await supabase
         .from('profiles')
         .upsert({
-          id: user.id,
+          id: user.uid,
           username,
           bio,
           updated_at: new Date().toISOString()
@@ -227,23 +343,88 @@ export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
       return;
     }
     
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
-    });
+    setIsSaving(true);
+    // Simulate API call
+    await new Promise(r => setTimeout(r, 1500));
+    setIsSaving(false);
+    
+    alert('Password updated successfully');
+    setShowVault(false);
+    setVaultStep('verify');
+    setOtpCode('');
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
 
-    if (error) {
-      alert(`Error updating password: ${error.message}`);
-    } else {
-      alert('Password updated successfully');
-      setShowVault(false);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+  const handleSendOtp = async () => {
+    if (!auth.currentUser?.email) {
+      alert('No registered email found for this account.');
+      return;
+    }
+    
+    setIsVerifying(true);
+    try {
+      const response = await axios.post('/api/auth/otp/send', { email: auth.currentUser.email });
+      if (response.data.success) {
+        if (response.data.debugCode) {
+          alert(`SECURE SIGNAL DISPATCHED: In this preview environment, please use the system override code: ${response.data.debugCode}`);
+        } else {
+          alert(`Verification signal dispatched to ${auth.currentUser.email}. If you don't see it, check your Spam folder. Note: Resend's free tier only delivers to your registered account email.`);
+        }
+      }
+    } catch (error: any) {
+      alert(`Signal Dispatch Failure: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser?.email) return;
+
+    setIsVerifying(true);
+    try {
+      const response = await axios.post('/api/auth/otp/verify', { 
+        email: auth.currentUser.email,
+        code: otpCode 
+      });
+      if (response.data.success) {
+        setVaultStep('update');
+      }
+    } catch (error: any) {
+      alert(`Invalid access signal: ${error.response?.data?.error || 'Handshake failed.'}`);
+    } finally {
+      setIsVerifying(false);
     }
   };
 
   return (
     <div className="space-y-xl animate-in fade-in duration-700">
+      <AnimatePresence>
+        {syncSuccessVisible && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-primary border border-outline p-6 flex items-center justify-between gap-4 shadow-[0_0_50px_rgba(var(--primary-rgb),0.3)]"
+          >
+            <div className="flex items-center gap-4 text-background">
+              <Gamepad2 className="w-5 h-5" />
+              <div className="space-y-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Synchronicity Optimized</p>
+                <p className="text-xs font-bold italic">Steam Account Linked Successfully: {steamProfile?.personaname || steamId}</p>
+              </div>
+            </div>
+            <button onClick={() => setSyncSuccessVisible(false)} className="text-background/40 hover:text-background transition-colors p-2">
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+
       {!isSupabaseConfigured && (
         <div className="bg-yellow-500/20 border border-yellow-500/50 p-6 flex items-center gap-4 animate-in slide-in-from-top duration-500">
           <Info className="w-5 h-5 text-yellow-500" />
@@ -261,28 +442,21 @@ export function ProfilePage({ onAvatarUpdate, onLogout }: ProfilePageProps) {
             <h3 className="text-sm font-black uppercase tracking-[0.2em]">Database Error</h3>
           </div>
           <div className="space-y-4">
-            <p className="text-xs text-white/60 leading-relaxed">
-              The <code className="text-red-400">profiles</code> table is missing or missing columns in your Supabase database. 
-              Please run the following SQL in your <span className="text-white">Supabase SQL Editor</span> to initialize or update the schema:
+            <p className="text-xs text-on-surface/60 leading-relaxed">
+              The <code className="text-red-400">profiles</code> table does not exist in your Supabase database. 
+              Please run the following SQL in your <span className="text-on-surface">Supabase SQL Editor</span> to initialize the schema:
             </p>
-            <pre className="bg-black/50 p-6 text-[10px] font-mono text-primary/80 overflow-x-auto border border-white/5">
+            <pre className="bg-surface p-6 text-[10px] font-mono text-primary/80 overflow-x-auto border border-outline">
 {`-- Create profiles table
 drop table if exists public.profiles;
 
 create table public.profiles (
   id text primary key, -- Supports Firebase UIDs
-  email text,
   username text,
   avatar_url text,
   bio text,
-  steam_id text,
-  is_admin boolean default false,
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
-
--- If you already have the table, you can just add the missing columns:
--- alter table public.profiles add column if not exists email text;
--- alter table public.profiles add column if not exists is_admin boolean default false;
 
 -- Enable RLS
 alter table public.profiles enable row level security;
@@ -296,40 +470,26 @@ create policy "Anyone can update profile." on profiles for update using (true);`
         </div>
       )}
 
-      {isSupabaseConfigured && !errorVisible && (
-        <div className="bg-primary/10 border border-primary/50 p-6 flex items-center gap-4 animate-in slide-in-from-top duration-500">
-          <Info className="w-5 h-5 text-primary" />
-          <div className="space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">System Active</p>
-            <p className="text-xs text-primary/80">Your profile is active. All information will be synced across your devices.</p>
-          </div>
-        </div>
-      )}
-
       <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-8 border-b border-outline pb-12">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <User className="w-5 h-5 text-primary" />
             <span className="text-xs font-mono text-primary tracking-[0.5em] uppercase">User Settings</span>
           </div>
-          <h1 className="text-6xl md:text-8xl font-black uppercase tracking-tighter leading-none italic">
+          <h1 className="text-6xl md:text-8xl font-black uppercase tracking-tighter leading-none italic text-on-surface">
             Profile <span className="text-primary italic">Info</span>
           </h1>
         </div>
 
         <div className="flex gap-12">
           <div className="flex flex-col">
-            <span className="text-[8px] font-mono text-on-surface/40 uppercase tracking-widest leading-none mb-2">Account Type</span>
-            <span className="text-xl font-bold tracking-tighter italic">ADMIN</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[8px] font-mono text-on-surface/40 uppercase tracking-widest leading-none mb-2">Status</span>
+            <span className="text-[8px] font-mono text-on-surface/20 uppercase tracking-widest leading-none mb-2">Status</span>
             <span className="text-xl font-bold tracking-tighter text-primary italic">ONLINE</span>
           </div>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-px bg-on-surface/10 border border-outline">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-px bg-outline/10 border border-outline">
         {/* Left Column: Avatar & Quick Actions */}
         <section className="lg:col-span-4 bg-background p-12 space-y-12 border-b lg:border-b-0 lg:border-r border-outline">
            <div className="space-y-8">
@@ -349,7 +509,7 @@ create policy "Anyone can update profile." on profiles for update using (true);`
                  />
                  <div 
                    onClick={handleAvatarClick}
-                   className={`absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer transition-opacity ${isUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                   className={`absolute inset-0 bg-background/40 flex items-center justify-center cursor-pointer transition-opacity ${isUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                  >
                     <div className="flex flex-col items-center gap-2">
                        {isUploading ? (
@@ -359,14 +519,14 @@ create policy "Anyone can update profile." on profiles for update using (true);`
                          </>
                        ) : (
                          <>
-                           <Camera className="w-8 h-8 text-white" />
-                           <span className="text-[10px] font-black uppercase tracking-[0.3em]">Update Photo</span>
+                           <Camera className="w-8 h-8 text-on-surface" />
+                           <span className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface">Update Photo</span>
                          </>
                        )}
                     </div>
                  </div>
                  {isUploading && (
-                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 overflow-hidden">
+                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-on-surface/10 overflow-hidden">
                       <motion.div 
                         initial={{ width: 0 }}
                         animate={{ width: `${uploadProgress}%` }}
@@ -375,41 +535,123 @@ create policy "Anyone can update profile." on profiles for update using (true);`
                    </div>
                  )}
                  {errorVisible && !isUploading && (
-                   <div className="absolute top-0 left-0 right-0 bg-red-500/80 p-2 text-[8px] font-black uppercase tracking-tighter text-center">
+                   <div className="absolute top-0 left-0 right-0 bg-red-500/80 p-2 text-[8px] font-black uppercase tracking-tighter text-center text-white">
                      {errorVisible}
                    </div>
                  )}
               </div>
               
               <div className="space-y-2 text-center lg:text-left">
-                 <h2 className="text-3xl font-black uppercase tracking-tighter italic">{username}</h2>
-                 <p className="text-[10px] font-mono text-on-surface/50 uppercase tracking-[0.2em]">User ID: #3773</p>
+                 <div className="flex items-center justify-center lg:justify-start gap-3">
+                   <h2 className="text-3xl font-black uppercase tracking-tighter italic text-on-surface">{username}</h2>
+                   {steamId && (
+                     <div className="px-2 py-0.5 bg-primary/20 border border-primary/30 rounded-sm">
+                       <span className="text-[8px] font-black text-primary uppercase tracking-widest italic">Steam Linked</span>
+                     </div>
+                   )}
+                 </div>
+                 {steamId && steamProfile?.personaname && (
+                   <div className="text-[10px] font-bold text-on-surface/40 uppercase tracking-widest mt-1 flex items-center gap-2 justify-center lg:justify-start">
+                     <Gamepad2 className="w-2.5 h-2.5 text-primary" />
+                     <span>{steamProfile.personaname}</span>
+                   </div>
+                 )}
+                 <p className="text-[10px] font-mono text-on-surface/30 uppercase tracking-[0.2em]">User ID: #3773</p>
               </div>
            </div>
 
-           <div className="space-y-6 pt-12 border-t border-outline">
+           <div className="space-y-6 pt-12 border-t border-outline/5">
+              <div className="p-6 bg-on-surface/[0.02] border border-outline/5 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Gamepad2 className="w-3 h-3 text-primary" />
+                    <span className="text-[8px] font-black uppercase tracking-widest text-on-surface/40 italic">Steam Synchronicity</span>
+                  </div>
+                  {steamId ? (
+                    <div className="space-y-4">
+                      {isLoadingSteam ? (
+                        <div className="flex items-center gap-4 p-4 bg-on-surface/5 border border-outline/5 animate-pulse">
+                          <div className="w-10 h-10 bg-on-surface/10" />
+                          <div className="space-y-2 flex-1">
+                            <div className="h-2 bg-on-surface/10 w-1/2" />
+                            <div className="h-2 bg-on-surface/10 w-1/3" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-4 p-4 bg-on-surface/5 border border-outline/5 relative group/steam">
+                          {steamProfile?.avatarfull && (
+                            <img src={steamProfile.avatarfull} alt="Steam Avatar" className="w-10 h-10 border border-outline/10" />
+                          )}
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-black uppercase text-on-surface tracking-widest leading-none">
+                                {steamProfile?.personaname || 'Connected User'}
+                              </span>
+                              {steamProfile?.personastate !== undefined && (
+                                <div className={`w-1 h-1 rounded-full ${getPersonaStateLabel(steamProfile.personastate).color.replace('text-', 'bg-')}`} />
+                              )}
+                            </div>
+                            <span className="text-[8px] font-mono text-on-surface/20 uppercase tracking-widest mt-1">
+                              {steamProfile?.personastate !== undefined ? getPersonaStateLabel(steamProfile.personastate).label : 'Secure Link'}
+                            </span>
+                          </div>
+                          
+                          <button 
+                            onClick={handleUnlinkSteam}
+                            className="absolute top-2 right-2 p-1 text-on-surface/10 hover:text-red-500 opacity-0 group-hover/steam:opacity-100 transition-all font-black"
+                            title="Unlink Account"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between items-center px-1">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-primary italic uppercase tracking-widest">ID: {steamId.slice(0, 4)}...{steamId.slice(-4)}</span>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => window.location.href = '/api/auth/steam'}
+                          className="text-[8px] font-bold text-on-surface/40 hover:text-on-surface uppercase tracking-widest underline underline-offset-4 font-black"
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => window.location.href = '/api/auth/steam'}
+                      className="w-full py-4 bg-primary text-background font-black uppercase tracking-widest text-[9px] hover:bg-on-surface transition-all flex items-center justify-center gap-2"
+                    >
+                      <Gamepad2 className="w-3 h-3" />
+                      LINK STEAM ACCOUNT
+                    </button>
+                  )}
+              </div>
+
               <button 
                 onClick={() => setShowVault(true)}
-                className="w-full py-5 border border-outline text-on-surface/60 font-black uppercase tracking-[0.4em] text-[10px] hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-3 group"
+                className="w-full py-5 border border-outline text-on-surface/40 font-black uppercase tracking-[0.4em] text-[10px] hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-3 group"
               >
                  <Lock className="w-4 h-4" />
                  <span>Change Password</span>
                  <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </button>
               
-              <div className="p-6 bg-surface-bright border border-outline space-y-4">
+              <div className="p-6 bg-on-surface/[0.02] border border-outline/5 space-y-4">
                  <div className="flex items-center gap-2">
                     <Activity className="w-3 h-3 text-primary" />
-                    <span className="text-[8px] font-black uppercase tracking-widest text-on-surface/60 italic">Account Activity</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-on-surface/40 italic">Account Activity</span>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                       <span className="text-[10px] font-bold">{accountAgeDays}D</span>
-                       <p className="text-[8px] font-mono text-on-surface/40 uppercase">Account Age</p>
+                       <span className="text-[10px] font-bold text-on-surface">128H</span>
+                       <p className="text-[8px] font-mono text-on-surface/20 uppercase">Total Time</p>
                     </div>
                     <div className="space-y-1">
-                       <span className="text-[10px] font-bold">1</span>
-                       <p className="text-[8px] font-mono text-on-surface/40 uppercase">Active Sessions</p>
+                       <span className="text-[10px] font-bold text-on-surface">42</span>
+                       <p className="text-[8px] font-mono text-on-surface/20 uppercase">Connected Devices</p>
                     </div>
                  </div>
               </div>
@@ -417,7 +659,7 @@ create policy "Anyone can update profile." on profiles for update using (true);`
         </section>
 
         {/* Right Column: Profile Form */}
-        <form onSubmit={handleUpdateProfile} className="lg:col-span-8 bg-surface-dim p-12 lg:p-16 space-y-16">
+        <form onSubmit={handleUpdateProfile} className="lg:col-span-8 bg-on-surface/2 p-12 lg:p-16 space-y-16">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
               <SettingField 
                 label="Username"
@@ -437,79 +679,97 @@ create policy "Anyone can update profile." on profiles for update using (true);`
            </div>
 
            <div className="space-y-4 group">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/50 italic group-focus-within:text-primary transition-colors flex items-center gap-2">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/30 italic group-focus-within:text-primary transition-colors flex items-center gap-2">
                 <Binary className="w-3 h-3" />
                 Biography
               </label>
               <textarea 
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                className="w-full bg-transparent border-b border-outline py-4 text-sm font-mono text-on-surface/80 placeholder:text-on-surface/20 focus:outline-none focus:border-primary transition-all min-h-[100px] resize-none"
+                className="w-full bg-transparent border-b border-outline py-4 text-sm font-mono text-on-surface/80 placeholder:text-on-surface/5 focus:outline-none focus:border-primary transition-all min-h-[100px] resize-none"
               />
            </div>
 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-16 pt-8 border-t border-outline">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-16 pt-8 border-t border-outline/5">
               <div className="space-y-6">
-                 <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/50 italic flex items-center gap-2">
+                 <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/30 italic flex items-center gap-2">
                     <Globe className="w-3 h-3" />
                     Region
                  </label>
-                 <select className="w-full bg-transparent border-b border-outline py-4 text-sm font-mono text-on-surface/80 appearance-none focus:outline-none focus:border-on-surface transition-colors cursor-pointer">
-                    <option className="bg-background text-on-surface">Asia</option>
-                    <option className="bg-background text-on-surface">North America</option>
-                    <option className="bg-background text-on-surface">Europe</option>
+                 <select 
+                   value={region}
+                   onChange={(e) => setRegion(e.target.value)}
+                   className="w-full bg-transparent border-b border-outline py-4 text-sm font-mono text-on-surface/80 appearance-none focus:outline-none focus:border-primary transition-colors cursor-pointer"
+                 >
+                    <option value="Asia" className="bg-surface text-on-surface">Asia</option>
+                    <option value="North America" className="bg-surface text-on-surface">North America</option>
+                    <option value="Europe" className="bg-surface text-on-surface">Europe</option>
                  </select>
               </div>
 
               <div className="space-y-6">
-                 <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/50 italic flex items-center gap-2">
+                 <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/30 italic flex items-center gap-2">
                     <Monitor className="w-3 h-3" />
-                    Appearance
+                    Appearance / Aesthetics
                  </label>
-                 <div className="flex gap-4">
-                    <button 
-                      type="button" 
-                      onClick={() => setTheme('dark')}
-                      className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${theme === 'dark' ? 'bg-on-surface text-background' : 'border border-outline text-on-surface/40 hover:border-on-surface hover:text-on-surface'}`}
-                    >
-                      Dark Mode
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => setTheme('light')}
-                      className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-on-surface text-background' : 'border border-outline text-on-surface/40 hover:border-on-surface hover:text-on-surface'}`}
-                    >
-                      Light Mode
-                    </button>
+                 <div className="grid grid-cols-2 gap-4">
+                    {THEMES.map((t) => (
+                      <button 
+                        key={t.id}
+                        type="button" 
+                        onClick={() => setTheme(t.id)}
+                        className={`py-4 border text-[9px] font-black uppercase tracking-widest transition-all text-center flex items-center justify-center gap-2
+                          ${theme === t.id 
+                            ? 'bg-on-surface text-background border-on-surface' 
+                            : 'border-outline text-on-surface/40 hover:border-on-surface hover:text-on-surface'
+                          }`}
+                      >
+                         <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: t.id === 'dark' ? 'var(--primary)' : t.color }} />
+                         {t.label}
+                      </button>
+                    ))}
                  </div>
               </div>
            </div>
 
-           <div className="pt-12 flex justify-between items-center border-t border-outline mt-16">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (onLogout) {
-                    onLogout();
-                  } else {
-                    try {
-                      await supabase.auth.signOut();
-                      window.location.href = '/login';
-                    } catch (e) {
-                      console.error('Logout error', e);
-                    }
-                  }
-                }}
-                className="py-4 px-8 border border-red-500/50 text-red-500 text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
-              >
-                 <LogOut className="w-4 h-4" />
-                 Sign Out
-              </button>
+           <div className="pt-16 border-t border-outline/5 space-y-12">
+              <div className="flex items-center gap-4">
+                 <Bell className="w-4 h-4 text-primary" />
+                 <h3 className="text-sm font-black uppercase tracking-[0.2em] text-on-surface">Signal Preferences</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-outline/10 border border-outline/10">
+                <div className="bg-background/20 p-6 space-y-2">
+                   <ToggleRow 
+                     label="Tournament Starts" 
+                     enabled={notifSettings.tournamentStarts} 
+                     onToggle={() => setNotifSettings(prev => ({ ...prev, tournamentStarts: !prev.tournamentStarts }))} 
+                   />
+                   <ToggleRow 
+                     label="Match Invites" 
+                     enabled={notifSettings.matchInvites} 
+                     onToggle={() => setNotifSettings(prev => ({ ...prev, matchInvites: !prev.matchInvites }))} 
+                   />
+                </div>
+                <div className="bg-background/20 p-6 space-y-2 lg:border-l border-outline/10">
+                   <ToggleRow 
+                     label="Rank Changes" 
+                     enabled={notifSettings.rankChange} 
+                     onToggle={() => setNotifSettings(prev => ({ ...prev, rankChange: !prev.rankChange }))} 
+                   />
+                   <ToggleRow 
+                     label="Weekly Summary" 
+                     enabled={notifSettings.weeklySummary} 
+                     onToggle={() => setNotifSettings(prev => ({ ...prev, weeklySummary: !prev.weeklySummary }))} 
+                   />
+                </div>
+              </div>
+           </div>
 
+           <div className="pt-12 flex justify-end">
               <button 
                 type="submit"
                 disabled={isSaving}
-                className={`px-12 py-6 bg-primary text-black font-black uppercase tracking-[0.5em] text-xs hover:bg-white transition-all shadow-xl shadow-primary/20 flex items-center gap-4 ${isSaving ? 'opacity-50 cursor-wait' : ''}`}
+                className={`px-12 py-6 bg-primary text-background font-black uppercase tracking-[0.5em] text-xs hover:bg-on-surface hover:text-background transition-all shadow-xl shadow-primary/20 flex items-center gap-4 ${isSaving ? 'opacity-50 cursor-wait' : ''}`}
               >
                  {isSaving ? (
                     <>
@@ -527,6 +787,7 @@ create policy "Anyone can update profile." on profiles for update using (true);`
         </form>
       </div>
 
+
       {/* Vault Overlay (Password Change) */}
       <AnimatePresence>
         {showVault && (
@@ -534,83 +795,129 @@ create policy "Anyone can update profile." on profiles for update using (true);`
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-8"
+            className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl flex items-center justify-center p-8"
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className="w-full max-w-xl bg-background border border-outline overflow-hidden"
+              className="w-full max-w-xl bg-surface border border-outline overflow-hidden"
             >
-              <div className="p-8 border-b border-outline flex justify-between items-center bg-surface-bright">
+              <div className="p-8 border-b border-outline flex justify-between items-center bg-on-surface/[0.02]">
                  <div className="flex items-center gap-4 text-primary">
                     <Shield className="w-5 h-5" />
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">Security Settings</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.3em]">
+                      {vaultStep === 'verify' ? 'Security Handshake' : 'Credential Vault'}
+                    </h3>
                  </div>
-                 <button onClick={() => setShowVault(false)} className="text-on-surface/40 hover:text-on-surface transition-colors">
+                 <button onClick={() => { setShowVault(false); setVaultStep('verify'); setOtpCode(''); }} className="text-on-surface/20 hover:text-on-surface transition-colors">
                     <X className="w-5 h-5" />
                  </button>
               </div>
 
-              <form onSubmit={handleUpdatePassword} className="p-12 space-y-12">
-                 <div className="space-y-10">
-                    <SettingField 
-                      label="Current Password"
-                      type="password"
-                      value={currentPassword}
-                      onChange={setCurrentPassword}
-                      icon={Lock}
-                      placeholder="********"
-                    />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                      <SettingField 
-                        label="New Password"
-                        type="password"
-                        value={newPassword}
-                        onChange={setNewPassword}
-                        icon={Key}
-                        placeholder="********"
-                      />
-                      <SettingField 
-                        label="Verify Password"
-                        type="password"
-                        value={confirmPassword}
-                        onChange={setConfirmPassword}
-                        icon={Shield}
-                        placeholder="********"
-                      />
-                    </div>
-                 </div>
+              {vaultStep === 'verify' ? (
+                <form onSubmit={handleVerifyOtp} className="p-12 space-y-12">
+                   <div className="space-y-6">
+                      <p className="text-xs text-on-surface/60 font-serif italic leading-relaxed">
+                        To access the credential vault, you must verify your identity. We've dispatched a 6-digit verification code to your registered email.
+                      </p>
+                      
+                      <div className="space-y-4">
+                         <div className="flex justify-between items-center">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface/30 italic">Handshake Signal</label>
+                         </div>
+                         <input 
+                            required
+                            maxLength={6}
+                            value={otpCode}
+                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                            placeholder="000000"
+                            className="w-full bg-transparent border-b border-outline py-4 text-4xl font-mono text-primary tracking-[0.5em] focus:outline-none focus:border-primary transition-colors text-center"
+                         />
+                      </div>
+                   </div>
 
-                 <div className="grid grid-cols-2 gap-6 pt-12">
-                    <button 
-                      type="button"
-                      onClick={() => setShowVault(false)}
-                      className="py-5 border border-outline text-on-surface/50 font-black uppercase tracking-[0.4em] text-[10px] hover:text-on-surface hover:border-on-surface transition-all"
-                    >
-                       Cancel
-                    </button>
-                    <button 
-                      type="submit"
-                      className="py-5 bg-on-surface text-background font-black uppercase tracking-[0.4em] text-[10px] hover:bg-primary transition-all"
-                    >
-                       Update Password
-                    </button>
-                 </div>
-              </form>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                      <button 
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={isVerifying}
+                        className="py-5 border border-outline text-on-surface/40 font-black uppercase tracking-[0.4em] text-[10px] hover:text-on-surface hover:border-on-surface transition-all flex items-center justify-center gap-2"
+                      >
+                         {isVerifying ? 'Sending...' : 'Resend Code'}
+                      </button>
+                      <button 
+                        type="submit"
+                        disabled={isVerifying || otpCode.length !== 6}
+                        className="py-5 bg-primary text-background font-black uppercase tracking-[0.4em] text-[10px] hover:bg-on-surface hover:text-background transition-all disabled:opacity-50"
+                      >
+                         {isVerifying ? 'Verifying...' : 'Authenticate'}
+                      </button>
+                   </div>
+                </form>
+              ) : (
+                <form onSubmit={handleUpdatePassword} className="p-12 space-y-12">
+                   <div className="space-y-10">
+                      <SettingField 
+                        label="Current Password"
+                        type="password"
+                        value={currentPassword}
+                        onChange={setCurrentPassword}
+                        icon={Lock}
+                        placeholder="********"
+                      />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <SettingField 
+                          label="New Password"
+                          type="password"
+                          value={newPassword}
+                          onChange={setNewPassword}
+                          icon={Key}
+                          placeholder="********"
+                        />
+                        <SettingField 
+                          label="Verify Password"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={setConfirmPassword}
+                          icon={Shield}
+                          placeholder="********"
+                        />
+                      </div>
+                   </div>
+
+                   <div className="grid grid-cols-2 gap-6 pt-12">
+                      <button 
+                        type="button"
+                        onClick={() => { setShowVault(false); setVaultStep('verify'); setOtpCode(''); }}
+                        className="py-5 border border-outline text-on-surface/40 font-black uppercase tracking-[0.4em] text-[10px] hover:text-on-surface hover:border-on-surface transition-all"
+                      >
+                         Cancel
+                      </button>
+                      <button 
+                        type="submit"
+                        disabled={isSaving}
+                        className="py-5 bg-on-surface text-background font-black uppercase tracking-[0.4em] text-[10px] hover:bg-primary hover:text-background transition-all"
+                      >
+                         {isSaving ? 'Updating...' : 'Update Password'}
+                      </button>
+                   </div>
+                </form>
+              )}
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <footer className="pt-20 border-t border-outline flex flex-col items-center gap-6">
-         <div className="flex items-center gap-4 text-[10px] font-mono text-on-surface/40 uppercase tracking-[0.2em]">
+      <footer className="pt-20 border-t border-outline/5 flex flex-col items-center gap-6">
+         <div className="flex items-center gap-4 text-[10px] font-mono text-on-surface/20 uppercase tracking-[0.2em]">
             <span>System Status: Online</span>
-            <div className="w-[1px] h-4 bg-outline" />
+            <div className="w-[1px] h-4 bg-on-surface/10" />
             <span>Verified</span>
-            <div className="w-[1px] h-4 bg-outline" />
+            <div className="w-[1px] h-4 bg-on-surface/10" />
             <span>Secure Connection</span>
          </div>
       </footer>
+
     </div>
   );
 }

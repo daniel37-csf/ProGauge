@@ -1,6 +1,6 @@
 {
-  "name": "Pro/Gauge",
-  "description": "High-fidelity gamer terminal for tracking events, progress, and library with full Steam integration.",
+  "name": "QuestGate",
+  "description": "High-fidelity gaming terminal for tracking progress, events, and library with real-time Steam synchronization and reminders.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

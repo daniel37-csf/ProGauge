@@ -1,7 +1,8 @@
-import { Search, Heart, Clock, RefreshCw, Download, Play, ArrowRight, Zap, X, ChevronRight, Shield, Cpu, Activity, Globe, ExternalLink, Loader2 } from 'lucide-react';
+import { Search, Heart, Clock, RefreshCw, Download, Play, ArrowRight, Zap, X, ChevronRight, Shield, Cpu, Activity, Globe, ExternalLink, Loader2, Terminal, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { db, auth } from '../lib/firebase';
+import { doc, getDoc, setDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 interface RelatedGame {
   id: string;
@@ -147,6 +148,77 @@ const LIBRARY_NODES: GameNode[] = [
     relatedGames: [
       { id: 'neon-protocol', title: 'Neon Protocol', image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=800' }
     ]
+  },
+  {
+    id: 'vanguard',
+    title: "Vanguard",
+    image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800",
+    status: 'INSTALLED',
+    hours: "242 hrs",
+    lastPlayed: "2 hours ago",
+    liked: true,
+    action: "Play",
+    specs: [
+      { label: 'Latency Core', value: '4ms / Neural' },
+      { label: 'Shielding', value: 'Level 4 Active' },
+      { label: 'Module Build', value: 'v9.8.4_Exp' }
+    ],
+    description: 'QuestGate experimental sandbox protocol. Deploy neural command simulations across parallel machine layers.',
+    developer: 'QuestGate Command Labs',
+    publisher: 'System Security Sentinel',
+    releaseDate: 'DEC 2025',
+    genre: 'Cyber Tactical Simulator',
+    platforms: ['Quantum Link', 'Core Terminal'],
+    fullSynopsis: 'Vanguard represents the absolute frontier of real-time multi-threaded simulation. Access the main decryption grids of safe virtual sandbox networks, configure neural payload paths, and observe live feedback from active local threads. Highly integrated with local game memory management parameters.',
+    steamMetadata: {
+      userReview: 'Overwhelmingly Stable',
+      criticScore: 98,
+      tags: ['Compiler', 'Tactical', 'Decryption', 'Simulation']
+    },
+    recommendedSpecs: [
+      { label: 'CPU', value: 'QUANTUM_SPIN_8_C' },
+      { label: 'Memory Buffer', value: '128GB_ECC' },
+      { label: 'Terminal Connection', value: 'Fiber Uplink' }
+    ],
+    relatedGames: [
+      { id: 'neon-protocol', title: 'Neon Protocol', image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=800' },
+      { id: 'shadow-tactics', title: 'Shadow Tactics', image: 'https://images.unsplash.com/photo-1614013410980-6e1307224211?auto=format&fit=crop&q=80&w=800' }
+    ]
+  },
+  {
+    id: 'stellar-frontier',
+    title: "Stellar Frontier",
+    image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800",
+    status: 'AVAILABLE',
+    hours: "89 hrs",
+    lastPlayed: "Yesterday",
+    liked: false,
+    action: "Install",
+    specs: [
+      { label: 'Engine', value: 'Stellar Fusion v3' },
+      { label: 'Sim Rates', value: '6000 ticks/sec' },
+      { label: 'Physics', value: 'Gravitational Vector' }
+    ],
+    description: 'An expansive interstellar navigation simulator. Chart deep star systems and establish trade routes.',
+    developer: 'Deep Space Pioneers',
+    publisher: 'Cosmic Operations Ltd',
+    releaseDate: 'FEB 2026',
+    genre: 'Space Sandbox',
+    platforms: ['Windows', 'Linux', 'VRE_Link'],
+    fullSynopsis: 'Command cruiser assets across uncharted galactic coordinates. Stellar Frontier introduces full physical rendering of gravitational mechanics near black holes and hyper-dense stars. Orchestrate flight angles, solar wind deflectors, and sub-light speed vectors to ensure successful payload drop-offs.',
+    steamMetadata: {
+      userReview: 'Highly Positive',
+      criticScore: 91,
+      tags: ['Space', 'Astronomy', 'Hard Sci-Fi', 'Sandbox']
+    },
+    recommendedSpecs: [
+      { label: 'GPU', value: 'RTX_5080_SUPER' },
+      { label: 'Thermals', value: 'Liquid Nitrogen Closed-Loop' },
+      { label: 'Storage Bandwidth', value: '7500MB/s Gen5 NVMe' }
+    ],
+    relatedGames: [
+      { id: 'velocity-x', title: 'Velocity X', image: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=800' }
+    ]
   }
 ];
 
@@ -163,16 +235,10 @@ export function LibraryPage() {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('steam_id')
-          .eq('id', user.id)
-          .single();
-        
-        if (!error && data?.steam_id) {
-          setSteamId(data.steam_id);
+      if (auth.currentUser) {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        if (userDoc.exists() && userDoc.data().steamId) {
+          setSteamId(userDoc.data().steamId);
         }
       }
     };
@@ -220,16 +286,30 @@ export function LibraryPage() {
         setShowSteamInput(false);
         
         // Save to profile if manual ID was used
-        if (idToUse) {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            await supabase
-              .from('profiles')
-              .upsert({
-                id: user.id,
-                steam_id: idToUse,
-                updated_at: new Date().toISOString()
-              }, { onConflict: 'id' });
+        if (idToUse && auth.currentUser) {
+          const userRef = doc(db, 'users', auth.currentUser.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (!userSnap.exists()) {
+            // User profile missing, create a basic one
+            const baseUsername = auth.currentUser.displayName?.replace(/\s+/g, '_').toLowerCase() || `player_${auth.currentUser.uid.slice(0, 5)}`;
+            const usernameRef = doc(db, 'usernames', baseUsername.toLowerCase());
+            
+            const batch = writeBatch(db);
+            batch.set(userRef, {
+              email: auth.currentUser.email || null,
+              username: baseUsername,
+              steamId: idToUse,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+            batch.set(usernameRef, { userId: auth.currentUser.uid });
+            await batch.commit();
+          } else {
+            await setDoc(userRef, {
+              steamId: idToUse,
+              updatedAt: serverTimestamp()
+            }, { merge: true });
           }
           setSteamId(idToUse);
         }
@@ -297,16 +377,17 @@ export function LibraryPage() {
           >
             {/* Search & Filters */}
             <section className="space-y-12">
-              <div className="relative border-b border-white/20 pb-4 group">
+              <div className="relative border-b border-outline pb-4 group">
                 <Search className="absolute left-0 top-1/2 -translate-y-1/2 text-primary w-5 h-5 group-focus-within:scale-125 transition-transform" />
                 <input 
                   type="text" 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search Games..." 
-                  className="w-full bg-transparent py-4 pl-10 pr-4 text-white font-black uppercase tracking-widest focus:outline-none placeholder:text-white/20"
+                  className="w-full bg-transparent py-4 pl-10 pr-4 text-on-surface font-black uppercase tracking-widest focus:outline-none placeholder:text-on-surface/20"
                 />
               </div>
+
 
               <div className="flex flex-wrap gap-4 scrollbar-hide items-center justify-between w-full">
                 <div className="flex gap-4">
@@ -338,17 +419,18 @@ export function LibraryPage() {
                             value={manualSteamId}
                             onChange={(e) => setManualSteamId(e.target.value)}
                             placeholder="17-DIGIT STEAM ID"
-                            className="bg-white/5 border border-white/10 px-4 py-2 text-[10px] font-mono focus:outline-none focus:border-primary transition-colors text-white w-48"
+                            className="bg-on-surface/5 border border-outline px-4 py-2 text-[10px] font-mono focus:outline-none focus:border-primary transition-colors text-on-surface w-48"
                           />
                           <button 
                             onClick={() => syncSteamLibrary(manualSteamId)}
                             disabled={isSyncing || !manualSteamId}
-                            className="px-4 py-2 bg-primary text-black text-[10px] font-black uppercase hover:bg-white transition-colors disabled:opacity-50"
+                            className="px-4 py-2 bg-primary text-background text-[10px] font-black uppercase hover:bg-on-surface hover:text-background transition-colors disabled:opacity-50"
                           >
                             {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Sync'}
                           </button>
-                          <button onClick={() => setShowSteamInput(false)} className="p-2 text-white/40 hover:text-white"><X className="w-4 h-4" /></button>
+                          <button onClick={() => setShowSteamInput(false)} className="p-2 text-on-surface/40 hover:text-on-surface"><X className="w-4 h-4" /></button>
                         </div>
+
                         <div className="flex gap-4">
                           {syncError && <span className="text-[9px] text-red-500 font-mono">{syncError}</span>}
                           <a 
@@ -364,11 +446,12 @@ export function LibraryPage() {
                     ) : (
                       <button 
                         onClick={() => setShowSteamInput(true)}
-                        className="flex items-center gap-3 px-6 py-2 border border-white/10 text-white/40 text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary transition-all"
+                        className="flex items-center gap-3 px-6 py-2 border border-outline text-on-surface/40 text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary transition-all"
                       >
                         <Globe className="w-3 h-3" />
                         <span>Link Steam ID</span>
                       </button>
+
                     )}
                   </div>
                 )}
@@ -376,8 +459,11 @@ export function LibraryPage() {
             </section>
 
             {/* Featured Section */}
-            <section className="grid grid-cols-1 lg:grid-cols-12 gap-px bg-white/10 border border-white/10 overflow-hidden">
-              <div className="lg:col-span-8 bg-white text-black p-12 lg:p-16 flex flex-col justify-between group cursor-pointer relative overflow-hidden">
+            <section className="grid grid-cols-1 lg:grid-cols-12 gap-px bg-outline border border-outline overflow-hidden">
+              <div 
+                onClick={() => setSelectedNodeId('vanguard')}
+                className="lg:col-span-8 bg-on-surface text-background p-12 lg:p-16 flex flex-col justify-between group cursor-pointer relative overflow-hidden"
+              >
                 <div className="absolute top-[-20%] right-[-10%] p-8 opacity-5 group-hover:opacity-100 transition-all duration-1000 rotate-12 group-hover:rotate-0">
                   <Zap className="w-96 h-96" />
                 </div>
@@ -389,7 +475,7 @@ export function LibraryPage() {
                   </p>
                 </div>
                 <div className="mt-12 flex items-center gap-6 group">
-                  <div className="w-16 h-16 border-2 border-black flex items-center justify-center group-hover:bg-black group-hover:text-white transition-all transform group-hover:scale-110">
+                  <div className="w-16 h-16 border-2 border-background flex items-center justify-center group-hover:bg-background group-hover:text-on-surface transition-all transform group-hover:scale-110">
                     <Play className="w-6 h-6 fill-current" />
                   </div>
                   <div className="flex flex-col">
@@ -398,31 +484,35 @@ export function LibraryPage() {
                   </div>
                 </div>
               </div>
-              <div className="lg:col-span-4 bg-background p-12 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-white/10 group cursor-pointer hover:bg-white/[0.02] transition-colors relative h-full">
+              <div 
+                onClick={() => setSelectedNodeId('stellar-frontier')}
+                className="lg:col-span-4 bg-background p-12 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-outline group cursor-pointer hover:bg-on-surface/[0.02] transition-colors relative h-full"
+              >
                 <div className="absolute bottom-0 right-0 p-4 hidden lg:block">
-                   <span className="text-[8px] font-mono text-white/5 uppercase vertical-text tracking-widest">SPOTLIGHT REF X99</span>
+                   <span className="text-[8px] font-mono text-on-surface/5 uppercase vertical-text tracking-widest">SPOTLIGHT REF X99</span>
                 </div>
                 <div className="flex justify-between items-start">
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary underline underline-offset-8">Spotlight</span>
-                    <h3 className="text-4xl lg:text-5xl font-black uppercase tracking-tighter mt-6 leading-none">Stellar<br/>Frontier</h3>
+                    <h3 className="text-4xl lg:text-5xl font-black uppercase tracking-tighter mt-6 leading-none text-on-surface">Stellar<br/>Frontier</h3>
                   </div>
-                  <span className="text-[9px] font-mono text-white/20 uppercase tracking-widest">[EXPANSION]</span>
+                  <span className="text-[9px] font-mono text-on-surface/20 uppercase tracking-widest">[EXPANSION]</span>
                 </div>
-                <div className="mt-12 flex items-center justify-between border-t border-white/10 pt-8">
+                <div className="mt-12 flex items-center justify-between border-t border-outline pt-8">
                   <div className="flex flex-col">
-                    <span className="text-4xl font-mono font-light italic">89 HRS</span>
-                    <span className="text-[9px] font-mono text-white/20 uppercase mt-1">Playtime Logged</span>
+                    <span className="text-4xl font-mono font-light italic text-on-surface">89 HRS</span>
+                    <span className="text-[9px] font-mono text-on-surface/20 uppercase mt-1">Playtime Logged</span>
                   </div>
-                  <div className="w-12 h-12 border border-white/20 flex items-center justify-center group-hover:border-primary group-hover:bg-primary group-hover:text-black transition-all">
+                  <div className="w-12 h-12 border border-outline flex items-center justify-center group-hover:border-primary group-hover:bg-primary group-hover:text-background transition-all font-black">
                     <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </div>
               </div>
             </section>
 
+
             {/* Game List Grid */}
-            <div className="grid grid-cols-1 gap-px bg-white/10 border border-white/10">
+            <div className="grid grid-cols-1 gap-px bg-outline border border-outline">
               {filteredGames.map(node => (
                 <GameRow 
                   key={node.id}
@@ -437,18 +527,19 @@ export function LibraryPage() {
                 />
               ))}
               {filteredGames.length < (LIBRARY_NODES.length + steamGames.length) && (
-                <div className="bg-primary p-12 flex flex-col justify-center items-center text-black cursor-pointer group hover:bg-white transition-colors">
+                <div className="bg-primary p-12 flex flex-col justify-center items-center text-background cursor-pointer group hover:bg-on-surface hover:text-background transition-colors">
                   <RefreshCw className="w-12 h-12 mb-4 group-hover:rotate-180 transition-transform duration-500" />
                   <span className="text-[10px] font-black uppercase tracking-[0.3em]">Load More</span>
                 </div>
               )}
               {filteredGames.length === 0 && (
                 <div className="py-32 flex flex-col items-center justify-center opacity-20 space-y-6">
-                  <Search className="w-16 h-16" />
-                  <span className="text-sm font-black uppercase tracking-[0.4em]">No matches found in grid</span>
+                  <Search className="w-16 h-16 text-on-surface" />
+                  <span className="text-sm font-black uppercase tracking-[0.4em] text-on-surface">No matches found in grid</span>
                 </div>
               )}
             </div>
+
           </motion.div>
         ) : (
           <motion.div 
@@ -456,32 +547,33 @@ export function LibraryPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="border border-white/10 bg-white/[0.02] overflow-hidden flex flex-col"
+            className="border border-outline bg-on-surface/2 overflow-hidden flex flex-col"
           >
             {/* Detail Header */}
-            <div className="p-6 border-b border-white/10 flex justify-between items-center bg-black/40 sticky top-0 z-10 backdrop-blur-md">
+            <div className="p-6 border-b border-outline flex justify-between items-center bg-surface-dim/40 sticky top-0 z-10 backdrop-blur-md">
               <button 
                 onClick={() => setSelectedNodeId(null)}
-                className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-white/40 hover:text-white transition-all group"
+                className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-on-surface/40 hover:text-on-surface transition-all group"
               >
                 <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
                 <span>Back to Library</span>
               </button>
               <div className="flex items-center gap-4">
-                 <div className="hidden sm:flex items-center gap-4 border-r border-white/10 pr-4 mr-4">
+                 <div className="hidden sm:flex items-center gap-4 border-r border-outline pr-4 mr-4">
                     <Activity className="w-4 h-4 text-primary" />
-                    <span className="text-[10px] font-mono text-white/40 uppercase tracking-[0.2em] italic">Time Played: {selectedNode?.hours}</span>
+                    <span className="text-[10px] font-mono text-on-surface/40 uppercase tracking-[0.2em] italic text-on-surface">Time Played: {selectedNode?.hours}</span>
                  </div>
                  <Shield className="w-4 h-4 text-primary animate-pulse" />
-                 <span className="text-[10px] font-mono text-white/20 uppercase tracking-[0.5em]">Secure Connection</span>
-                 <X className="w-5 h-5 text-white/20 hover:text-white cursor-pointer ml-4 transition-colors" onClick={() => setSelectedNodeId(null)} />
+                 <span className="text-[10px] font-mono text-on-surface/20 uppercase tracking-[0.5em]">Secure Connection</span>
+                 <X className="w-5 h-5 text-on-surface/20 hover:text-on-surface cursor-pointer ml-4 transition-colors" onClick={() => setSelectedNodeId(null)} />
               </div>
             </div>
 
+
             <div className="flex-grow">
               {/* Hero Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 border-b border-white/10">
-                <div className="lg:col-span-5 relative h-[400px] lg:h-[600px] overflow-hidden group border-r border-white/10">
+              <div className="grid grid-cols-1 lg:grid-cols-12 border-b border-outline">
+                <div className="lg:col-span-5 relative h-[400px] lg:h-[600px] overflow-hidden group border-r border-outline">
                    <img 
                     src={selectedNode?.appId ? `https://cdn.akamai.steamstatic.com/steam/apps/${selectedNode.appId}/header.jpg` : selectedNode?.image} 
                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-[10s] ease-out" 
@@ -490,22 +582,22 @@ export function LibraryPage() {
                    <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
                    <div className="absolute bottom-12 left-12 right-12">
                       <div className="flex items-center gap-4 mb-4">
-                        <span className="px-3 py-1 bg-primary text-black text-[10px] font-bold uppercase tracking-widest">STATUS: {selectedNode?.status}</span>
-                        <div className="h-[1px] flex-grow bg-white/20" />
+                        <span className="px-3 py-1 bg-primary text-background text-[10px] font-bold uppercase tracking-widest font-black">STATUS: {selectedNode?.status}</span>
+                        <div className="h-[1px] flex-grow bg-on-surface/20" />
                       </div>
-                      <h2 className="text-6xl lg:text-8xl font-black uppercase tracking-[calc(-0.05em)] leading-[0.85] italic mb-4">{selectedNode?.title}</h2>
+                      <h2 className="text-6xl lg:text-8xl font-black uppercase tracking-[calc(-0.05em)] leading-[0.85] italic mb-4 text-on-surface">{selectedNode?.title}</h2>
                       <div className="flex flex-wrap gap-2">
                         {selectedNode?.steamMetadata?.tags.map(tag => (
-                          <span key={tag} className="text-[8px] font-mono text-white/40 border border-white/10 px-2 py-1 uppercase tracking-widest">{tag}</span>
+                          <span key={tag} className="text-[8px] font-mono text-on-surface/40 border border-outline px-2 py-1 uppercase tracking-widest">{tag}</span>
                         ))}
                       </div>
                    </div>
                 </div>
 
-                <div className="lg:col-span-7 p-12 lg:p-16 flex flex-col justify-between bg-black/20">
+                <div className="lg:col-span-7 p-12 lg:p-16 flex flex-col justify-between bg-on-surface/2">
                   <div className="space-y-16">
                      {/* Metadata Grid */}
-                     <div className="grid grid-cols-2 md:grid-cols-4 gap-x-12 gap-y-8 border-b border-white/5 pb-12">
+                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 border-b border-outline/5 pb-12">
                         <MetadataItem label="Developer" value={selectedNode?.developer} />
                         <MetadataItem label="Publisher" value={selectedNode?.publisher} />
                         <MetadataItem label="Release Date" value={selectedNode?.releaseDate} />
@@ -523,9 +615,9 @@ export function LibraryPage() {
                      <div className="space-y-6">
                         <div className="flex items-center gap-3">
                            <Globe className="w-4 h-4 text-primary/40" />
-                           <h4 className="text-[11px] font-bold uppercase tracking-[0.3em] italic text-white/60">Game Description</h4>
+                           <h4 className="text-[11px] font-bold uppercase tracking-[0.3em] italic text-on-surface/60">Game Description</h4>
                         </div>
-                        <p className="text-lg lg:text-xl font-serif italic text-white/80 leading-relaxed border-l-4 border-primary/20 pl-8 max-w-2xl">
+                        <p className="text-lg lg:text-xl font-serif italic text-on-surface/80 leading-relaxed border-l-4 border-primary/20 pl-8 max-w-2xl">
                           {selectedNode?.fullSynopsis}
                         </p>
                      </div>
@@ -535,14 +627,14 @@ export function LibraryPage() {
                      {selectedNode?.appId ? (
                        <a 
                          href={`steam://run/${selectedNode.appId}`}
-                         className="flex-[2] py-6 bg-white text-black font-black uppercase tracking-[0.4em] text-[12px] hover:bg-primary transition-all flex items-center justify-center gap-4 relative overflow-hidden group"
+                         className="flex-[2] py-6 bg-on-surface text-background font-black uppercase tracking-[0.4em] text-[12px] hover:bg-primary hover:text-background transition-all flex items-center justify-center gap-4 relative overflow-hidden group"
                        >
                           <div className="absolute inset-0 bg-primary/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
                           <Play className="w-5 h-5 fill-current" />
                           <span>Launch Protocol</span>
                        </a>
                      ) : (
-                       <button className="flex-[2] py-6 bg-white text-black font-black uppercase tracking-[0.4em] text-[12px] hover:bg-primary transition-all flex items-center justify-center gap-4 relative overflow-hidden group">
+                       <button className="flex-[2] py-6 bg-on-surface text-background font-black uppercase tracking-[0.4em] text-[12px] hover:bg-primary hover:text-background transition-all flex items-center justify-center gap-4 relative overflow-hidden group">
                           <div className="absolute inset-0 bg-primary/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
                           <Play className="w-5 h-5 fill-current" />
                           <span>{selectedNode?.action === 'Play' ? 'Play Game' : 'Install Game'}</span>
@@ -554,7 +646,7 @@ export function LibraryPage() {
                           href={`https://store.steampowered.com/app/${selectedNode.appId}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex-1 py-6 border border-white/10 text-white/40 font-black uppercase tracking-[0.4em] text-[11px] hover:border-white hover:text-white transition-all flex items-center justify-center gap-3"
+                          className="flex-1 py-6 border border-outline text-on-surface/40 font-black uppercase tracking-[0.4em] text-[11px] hover:border-on-surface hover:text-on-surface transition-all flex items-center justify-center gap-3"
                        >
                           <ExternalLink className="w-4 h-4" />
                           Store Page
@@ -564,35 +656,39 @@ export function LibraryPage() {
                 </div>
               </div>
 
+              {/* Interactive Dashboards for Custom/Simulation Nodes */}
+              {selectedNodeId === 'vanguard' && <VanguardWorkbench />}
+              {selectedNodeId === 'stellar-frontier' && <StellarFrontierDashboard />}
+
               {/* Technical Specs & Related Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 border-b border-white/10 bg-black/40">
-                <div className="lg:col-span-8 p-12 lg:p-16 border-b lg:border-b-0 lg:border-r border-white/10">
+              <div className="grid grid-cols-1 lg:grid-cols-12 border-b border-outline bg-surface-dim/40">
+                <div className="lg:col-span-8 p-12 lg:p-16 border-b lg:border-b-0 lg:border-r border-outline">
                    <div className="flex items-center justify-between mb-12">
                       <div className="flex items-center gap-4">
                          <div className="w-2 h-8 bg-primary" />
-                         <h3 className="text-2xl font-black uppercase tracking-widest italic">
+                         <h3 className="text-2xl font-black uppercase tracking-widest italic text-on-surface">
                             {selectedNode?.appId ? 'Steam Metrics' : 'System Requirements'}
                          </h3>
                       </div>
-                      <span className="text-[10px] font-mono text-white/20 uppercase tracking-[0.4em]">Compatibility: Pass</span>
+                      <span className="text-[10px] font-mono text-on-surface/20 uppercase tracking-[0.4em]">Compatibility: Pass</span>
                    </div>
 
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
                       {selectedNode?.appId ? (
                         <div className="col-span-2 space-y-12">
                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                              <MetricBox label="Integrity Score" value={`${selectedNode.achievementProgress?.percentage || 0}%`} sub="Achievement Sync" />
-                              <MetricBox label="Milestones" value={`${selectedNode.achievementProgress?.completed || 0} / ${selectedNode.achievementProgress?.total || 0}`} sub="Tactical Peaks" />
-                              <MetricBox label="App Identifier" value={`REF_${selectedNode.appId}`} sub="Global Network" />
+                              <MetricBox label="Completion" value={`${selectedNode.achievementProgress?.percentage || 0}%`} sub="Synced achievements" />
+                              <MetricBox label="Achievements" value={`${selectedNode.achievementProgress?.completed || 0} / ${selectedNode.achievementProgress?.total || 0}`} sub="Challenges finished" />
+                              <MetricBox label="App ID" value={`${selectedNode.appId}`} sub="Steam Catalog Identifier" />
                            </div>
                            
                            {selectedNode.achievementProgress && (
-                             <div className="w-full h-2 bg-white/5 relative overflow-hidden">
-                               <motion.div 
+                             <div className="w-full h-2 bg-on-surface/5 relative overflow-hidden">
+                                <motion.div 
                                  initial={{ width: 0 }}
                                  animate={{ width: `${selectedNode.achievementProgress.percentage}%` }}
                                  className="absolute h-full bg-primary"
-                               />
+                                />
                              </div>
                            )}
                         </div>
@@ -602,9 +698,9 @@ export function LibraryPage() {
                              <h4 className="text-[10px] font-bold uppercase tracking-widest text-primary italic">Minimum Specs</h4>
                              <div className="space-y-6">
                                 {selectedNode?.specs.map(spec => (
-                                  <div key={spec.label} className="flex justify-between border-b border-white/5 pb-2 hover:bg-white/[0.02] transition-colors px-2">
-                                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 italic">{spec.label}</span>
-                                     <p className="text-xs font-mono text-white/90">{spec.value}</p>
+                                  <div key={spec.label} className="flex justify-between border-b border-outline pb-2 hover:bg-on-surface/[0.02] transition-colors px-2">
+                                     <span className="text-[9px] font-bold uppercase tracking-widest text-on-surface/30 italic">{spec.label}</span>
+                                     <p className="text-xs font-mono text-on-surface/90">{spec.value}</p>
                                   </div>
                                 ))}
                              </div>
@@ -614,9 +710,9 @@ export function LibraryPage() {
                              <h4 className="text-[10px] font-bold uppercase tracking-widest text-primary italic">Recommended Specs</h4>
                              <div className="space-y-6">
                                 {selectedNode?.recommendedSpecs.map(spec => (
-                                  <div key={spec.label} className="flex justify-between border-b border-white/5 pb-2 hover:bg-white/[0.02] transition-colors px-2">
-                                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 italic">{spec.label}</span>
-                                     <p className="text-xs font-mono text-white/90">{spec.value}</p>
+                                  <div key={spec.label} className="flex justify-between border-b border-outline pb-2 hover:bg-on-surface/[0.02] transition-colors px-2">
+                                     <span className="text-[9px] font-bold uppercase tracking-widest text-on-surface/30 italic">{spec.label}</span>
+                                     <p className="text-xs font-mono text-on-surface/90">{spec.value}</p>
                                   </div>
                                 ))}
                              </div>
@@ -629,7 +725,7 @@ export function LibraryPage() {
                 <div className="lg:col-span-4 p-12 lg:p-16 flex flex-col">
                    <div className="flex items-center gap-4 mb-12">
                       <RefreshCw className="w-5 h-5 text-primary/40" />
-                      <h3 className="text-[11px] font-bold uppercase tracking-[0.3em] italic text-white/60">Related Games</h3>
+                      <h3 className="text-[11px] font-bold uppercase tracking-[0.3em] italic text-on-surface/60">Related Games</h3>
                    </div>
                    
                    <div className="space-y-8 flex-grow">
@@ -637,14 +733,14 @@ export function LibraryPage() {
                         <div 
                           key={game.id} 
                           onClick={() => setSelectedNodeId(game.id)}
-                          className="group flex gap-6 items-center cursor-pointer hover:bg-white/5 transition-all p-4 -mx-4 border border-transparent hover:border-white/10"
+                          className="group flex gap-6 items-center cursor-pointer hover:bg-on-surface/5 transition-all p-4 -mx-4 border border-transparent hover:border-outline"
                         >
                            <div className="w-20 h-24 shrink-0 overflow-hidden transition-all">
                               <img src={game.image} className="w-full h-full object-cover" alt="" />
                            </div>
                            <div className="flex-grow space-y-2">
-                              <h4 className="text-lg font-black uppercase tracking-tight group-hover:text-primary transition-colors">{game.title}</h4>
-                              <div className="flex items-center gap-2 text-[9px] font-mono text-white/20 uppercase">
+                              <h4 className="text-lg font-black uppercase tracking-tight group-hover:text-primary transition-colors text-on-surface">{game.title}</h4>
+                              <div className="flex items-center gap-2 text-[9px] font-mono text-on-surface/20 uppercase text-on-surface">
                                  <span>View Game</span>
                                  <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                               </div>
@@ -653,12 +749,13 @@ export function LibraryPage() {
                       ))}
                    </div>
 
-                   <div className="mt-12 p-8 border border-white/5 bg-white/[0.02] flex flex-col items-center justify-center gap-4 opacity-40 hover:opacity-100 transition-all cursor-pointer">
+                   <div className="mt-12 p-8 border border-outline bg-on-surface/2 flex flex-col items-center justify-center gap-4 opacity-40 hover:opacity-100 transition-all cursor-pointer">
                       <Search className="w-6 h-6 text-primary" />
-                      <span className="text-[10px] font-black uppercase tracking-[0.3em]">Explore More</span>
+                      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface">Explore More</span>
                    </div>
                 </div>
               </div>
+
             </div>
           </motion.div>
         )}
@@ -669,19 +766,24 @@ export function LibraryPage() {
 
 function MetricBox({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="bg-white/5 p-8 border border-white/10 hover:bg-white/10 transition-colors">
-       <span className="text-[9px] font-bold uppercase tracking-widest text-primary block mb-4">{label}</span>
-       <p className="text-4xl font-mono italic text-white/90 truncate">{value}</p>
-       <span className="text-[8px] font-mono uppercase text-white/20 mt-2 block">{sub}</span>
+    <div className="bg-on-surface/5 p-10 border border-outline hover:bg-on-surface/10 transition-colors flex flex-col justify-between space-y-6">
+       <div>
+         <span className="text-[9px] font-bold uppercase tracking-widest text-primary block mb-3">{label}</span>
+         <p className="text-4xl font-mono italic text-on-surface/90 leading-tight">{value}</p>
+       </div>
+       <div className="border-t border-outline/10 pt-4 mt-auto">
+         <span className="text-[8px] font-mono uppercase text-on-surface/40 block leading-relaxed">{sub}</span>
+       </div>
     </div>
   );
 }
 
-function MetadataItem({ label, value, color = "text-white/80" }: { label: string; value?: string; color?: string }) {
+function MetadataItem({ label, value, color = "text-on-surface/80" }: { label: string; value?: string; color?: string }) {
   return (
-    <div className="space-y-2">
-       <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-white/20 italic block">{label}</span>
-       <p className={`text-sm font-black uppercase tracking-widest ${color} truncate`}>{value}</p>
+    <div className="space-y-3 p-5 bg-on-surface/[0.02] border border-outline/5 rounded-sm hover:border-outline/10 hover:bg-on-surface/[0.04] transition-all">
+       <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-primary/50 italic block leading-none">{label}</span>
+       <div className="h-px bg-outline/10 w-6" />
+       <p className={`text-xs sm:text-sm font-bold uppercase tracking-wider leading-relaxed ${color}`}>{value}</p>
     </div>
   );
 }
@@ -691,10 +793,534 @@ function FilterChip({ label, active = false, onClick }: { label: string; active?
     <button 
       onClick={onClick}
       className={`px-6 py-2 border text-[10px] uppercase font-bold tracking-widest transition-colors ${
-      active ? 'bg-primary text-black border-primary' : 'bg-transparent text-white/70 border-white/20 hover:border-white/60 hover:text-white'
+      active ? 'bg-primary text-background border-primary font-black' : 'bg-transparent text-on-surface/70 border-outline/20 hover:border-on-surface/60 hover:text-on-surface'
     }`}>
       {label}
     </button>
+  );
+}
+
+function VanguardWorkbench() {
+  const [memoryAllocation, setMemoryAllocation] = useState<number>(32);
+  const [threadCount, setThreadCount] = useState<number>(4);
+  const [cipherType, setCipherType] = useState<string>('AES-256-GCM');
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([
+    '[INIT] Vanguard Speedbench loaded.',
+    '[INFO] System validation complete. Ready to run tests.'
+  ]);
+  const [threads, setThreads] = useState<{ id: number; progress: number; status: string }[]>([]);
+
+  const addLog = (msg: string) => {
+    setTerminalLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`].slice(-8));
+  };
+
+  const handleStartSimulation = () => {
+    if (isRunning) return;
+    setIsRunning(true);
+    setTerminalLogs([]);
+    addLog('STRIKE INITIATED: Spawning active simulation worker threads...');
+
+    // Initialize simulate threads
+    const newThreads = Array.from({ length: threadCount }).map((_, i) => ({
+      id: i + 1,
+      progress: 0,
+      status: 'ALLOCATED'
+    }));
+    setThreads(newThreads);
+
+    const steps = [
+      'Authenticating local secure channels...',
+      'Allocating sandbox memory directories...',
+      'Mapping test cluster data structures...',
+      'Reconstructing decrypted cache structures...',
+      'Simulation complete. Speed benchmarks recorded.'
+    ];
+
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      // Advance step logs
+      if (currentStep < steps.length && Math.random() > 0.4) {
+        addLog(steps[currentStep]);
+        currentStep++;
+      }
+
+      // Update progress of each thread
+      setThreads(prev => {
+        let allDone = true;
+        const updated = prev.map((t) => {
+          if (t.progress < 100) {
+            allDone = false;
+            const step = Math.floor(Math.random() * 25) + 5;
+            const newProgress = Math.min(100, t.progress + step);
+            let stat = 'RUNNING';
+            if (newProgress === 100) stat = 'VERIFIED';
+            else if (newProgress > 60) stat = 'ANALYZING';
+            return { ...t, progress: newProgress, status: stat };
+          }
+          return t;
+        });
+        if (allDone && currentStep >= steps.length) {
+          clearInterval(interval);
+          setIsRunning(false);
+          addLog('SYSTEM STABLE: Benchmark tests complete. Performance records saved successfully.');
+        }
+        return updated;
+      });
+    }, 400);
+  };
+
+  return (
+    <div className="bg-surface-dim border-y border-outline/15 p-12 lg:p-16 space-y-12">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-outline/10 pb-8">
+        <div className="space-y-2">
+          <div className="flex items-center gap-4">
+            <Terminal className="w-5 h-5 text-primary" />
+            <h4 className="text-xl font-bold uppercase tracking-wider text-on-surface">Vanguard Performance Lab</h4>
+          </div>
+          <p className="text-xs text-on-surface/50 font-mono">Performance and hardware tuning console</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[9px] font-mono text-emerald-500 uppercase tracking-widest">System Status: Stable</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        {/* Controls */}
+        <div className="lg:col-span-5 space-y-8">
+          <div className="bg-surface-variant/30 p-8 border border-outline/10 space-y-8">
+            <h5 className="text-[10px] font-bold uppercase tracking-widest text-primary italic flex items-center gap-2">
+              <Sliders className="w-3 h-3" /> Simulation Setup
+            </h5>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-center text-xs font-mono">
+                <span className="text-on-surface/60">Simulator RAM Allocation</span>
+                <span className="text-primary font-bold">{memoryAllocation} GB</span>
+              </div>
+              <input 
+                type="range" 
+                min="16" 
+                max="128" 
+                step="16"
+                value={memoryAllocation} 
+                onChange={(e) => {
+                  setMemoryAllocation(parseInt(e.target.value));
+                  addLog(`Allocated local buffer updated to ${e.target.value} GB`);
+                }}
+                disabled={isRunning}
+                className="w-full h-1 bg-outline/20 accent-primary appearance-none cursor-pointer rounded"
+              />
+              <div className="flex justify-between text-[8px] font-mono text-on-surface/30">
+                <span>16GB</span>
+                <span>64GB</span>
+                <span>128GB</span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-center text-xs font-mono">
+                <span className="text-on-surface/60">Simulation Threads</span>
+                <span className="text-primary font-bold">{threadCount} Threads</span>
+              </div>
+              <input 
+                type="range" 
+                min="2" 
+                max="8" 
+                step="2"
+                value={threadCount} 
+                onChange={(e) => {
+                  setThreadCount(parseInt(e.target.value));
+                  addLog(`Active virtual threads pool reconfigured to ${e.target.value}`);
+                }}
+                disabled={isRunning}
+                className="w-full h-1 bg-outline/20 accent-primary appearance-none cursor-pointer rounded"
+              />
+              <div className="flex justify-between text-[8px] font-mono text-on-surface/30">
+                <span>2 CORE</span>
+                <span>4 CORE</span>
+                <span>8 CORE</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-mono text-on-surface/40 uppercase block">Test Algorithm Type</label>
+              <select 
+                value={cipherType} 
+                onChange={(e) => {
+                  setCipherType(e.target.value);
+                  addLog(`Switched simulation algorithm to ${e.target.value}`);
+                }}
+                disabled={isRunning}
+                className="w-full bg-background border border-outline/20 p-3 text-xs font-mono text-on-surface focus:outline-none focus:border-primary uppercase"
+              >
+                <option value="AES-256-GCM">AES-256-GCM (Fast Validation)</option>
+                <option value="CHACHA20-POLY1305">ChaCha20-Poly1305 (Lightweight)</option>
+                <option value="RSA-4096-PSS">RSA-4096-PSS (Deep Verification)</option>
+                <option value="NONE-DEBUG">None (Raw Simulation)</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            onClick={handleStartSimulation} 
+            disabled={isRunning}
+            className={`w-full py-5 font-black uppercase tracking-[0.25em] text-xs transition-all flex items-center justify-center gap-3 border ${
+              isRunning 
+                ? 'bg-transparent text-primary/40 border-primary/20 cursor-not-allowed' 
+                : 'bg-primary text-background border-primary hover:bg-transparent hover:text-primary'
+            }`}
+          >
+            {isRunning ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Running benchmark tests...</span>
+              </>
+            ) : (
+              <>
+                <Activity className="w-4 h-4" />
+                <span>Run Sandbox Speed Tests</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Live Threads Monitor & Diagnostics */}
+        <div className="lg:col-span-7 space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-background border border-outline/10 p-6 space-y-4">
+              <h6 className="text-[9px] font-bold uppercase tracking-wider text-on-surface/40">Active CPU Threads</h6>
+              {threads.length === 0 ? (
+                <div className="h-[120px] flex flex-col items-center justify-center border border-dashed border-outline/10 text-[9px] font-mono text-on-surface/30">
+                  <span>START SYSTEM SPEED TEST</span>
+                </div>
+              ) : (
+                <div className="space-y-4 h-[120px] overflow-y-auto scrollbar-hide pr-2">
+                  {threads.map(t => (
+                    <div key={t.id} className="space-y-1">
+                      <div className="flex justify-between text-[9px] font-mono">
+                        <span className="text-on-surface/60">WORKER_CPU_{t.id}</span>
+                        <span className={t.status === 'VERIFIED' ? 'text-emerald-500' : 'text-primary'}>{t.status} - {t.progress}%</span>
+                      </div>
+                      <div className="w-full h-1 bg-outline/10 overflow-hidden relative">
+                        <div 
+                          className={`absolute h-full transition-all duration-300 ${t.status === 'VERIFIED' ? 'bg-emerald-500' : 'bg-primary'}`}
+                          style={{ width: `${t.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-background border border-outline/10 p-6 flex flex-col justify-between">
+              <div>
+                <h6 className="text-[9px] font-bold uppercase tracking-wider text-on-surface/40 mb-2">Sandbox Speed Stats</h6>
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <span className="text-[8px] font-mono text-on-surface/30 uppercase block">Transfer Rate</span>
+                    <p className="font-mono text-xs text-on-surface/80">{isRunning ? '4.8 Gbps' : '0.0 Gbps'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-on-surface/30 uppercase block">Processing Latency</span>
+                    <p className="font-mono text-xs text-on-surface/80">{cipherType === 'NONE-DEBUG' ? '0.0ms' : '0.42ms'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-on-surface/30 uppercase block">Memory Pools</span>
+                    <p className="font-mono text-xs text-on-surface/80">{memoryAllocation} Sectors</p>
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-mono text-on-surface/30 uppercase block">Response Time</span>
+                    <p className="font-mono text-xs text-emerald-400">4.2ms (Excellent)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Terminal STDOUT Logs */}
+          <div className="bg-neutral-950 p-6 border border-primary/20 rounded-sm font-mono text-[10px] space-y-2 text-primary/80 relative overflow-hidden shadow-inner">
+            <div className="absolute top-0 right-0 p-2 text-[7px] text-primary/30 uppercase select-none font-bold">Vanguard Diagnostics</div>
+            <div className="flex items-center gap-2 border-b border-primary/10 pb-2 mb-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              <span className="text-[8px] text-primary/40 uppercase ml-2 tracking-widest font-black">Active Output Terminal</span>
+            </div>
+            <div className="space-y-1.5 h-[140px] overflow-y-auto scrollbar-hide flex flex-col justify-end">
+              {terminalLogs.map((log, i) => (
+                <div key={i} className="flex gap-4">
+                  <span className="text-primary/30 select-none">$&gt;</span>
+                  <p className="break-all">{log}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StellarFrontierDashboard() {
+  const [warpVelocity, setWarpVelocity] = useState<number>(4.5);
+  const [targetSystem, setTargetSystem] = useState<string>('SAGITTARIUS-A');
+  const [auxiliaryShields, setAuxiliaryShields] = useState<number>(85);
+  const [, setFuelLoad] = useState<number>(100);
+  const [scanResult, setScanResult] = useState<string>('Ready to initialize navigation sweep.');
+  const [isNavulating, setIsNavulating] = useState<boolean>(false);
+
+  const systemsMap: Record<string, { dist: string; danger: string; coord: string; gravity: string }> = {
+    'PROXIMA': { dist: '4.24 Light Years', danger: 'Low Flare Index', coord: '14h 29m -62°', gravity: '1.14G Base' },
+    'KEPLER-186F': { dist: '582 Light Years', danger: 'Moderate Magnetic Fields', coord: '19h 54m +43°', gravity: '0.94G Base' },
+    'SAGITTARIUS-A': { dist: '26,673 Light Years', danger: 'CRITICAL EVENT HORIZON', coord: '17h 45m -29°', gravity: '98,000G Core' },
+    'TRAPPIST-1': { dist: '40.7 Light Years', danger: 'High Tidal Inertia', coord: '23h 06m -05°', gravity: '0.82G Base' }
+  };
+
+  const handleStartChart = () => {
+    if (isNavulating) return;
+    setIsNavulating(true);
+    setScanResult('Engaging sub-light sensors. Computing gravitational pathways...');
+
+    setTimeout(() => {
+      const speedCost = warpVelocity * 8;
+      const finalFuel = Math.max(12, 100 - Math.floor(speedCost));
+      setFuelLoad(finalFuel);
+
+      let feedback = '';
+      if (targetSystem === 'SAGITTARIUS-A') {
+        if (auxiliaryShields < 90 || warpVelocity > 5) {
+          feedback = 'WARNING: Gravitational shear exceeds tolerance! Structural containment compromised at Sagittarius event horizon. Set Warp < 5.0 and Shields > 90% to avoid crushing.';
+        } else {
+          feedback = 'SUCCESS: Super-deep orbit path verified. Trajectory bypasses Sagittarius event horizon with auxiliary magnetic stabilizers engaged.';
+        }
+      } else {
+        feedback = `SUCCESS: Navigation map established to ${targetSystem.replace('-', ' ')}! Est. travel time with ${warpVelocity}c warp speed is ${(systemsMap[targetSystem] ? parseFloat(systemsMap[targetSystem].dist) / warpVelocity : 10).toFixed(2)} years. Fuel reserves stable at ${finalFuel}%.`;
+      }
+      setScanResult(feedback);
+      setIsNavulating(false);
+    }, 1500);
+  };
+
+  const activeSys = systemsMap[targetSystem] || systemsMap['PROXIMA'];
+  const orbitalRadius = (120 - auxiliaryShields) * 0.8 + 30;
+
+  return (
+    <div className="bg-surface-dim border-y border-outline/15 p-12 lg:p-16 space-y-12">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-outline/10 pb-8">
+        <div className="space-y-2">
+          <div className="flex items-center gap-4">
+            <Globe className="w-5 h-5 text-primary" />
+            <h4 className="text-xl font-bold uppercase tracking-wider text-on-surface">Stellar Frontier Travel Planner</h4>
+          </div>
+          <p className="text-xs text-on-surface/50 font-mono">SPACE ROUTES AND GRAVITY ASSIST SPEED CALCULATOR</p>
+        </div>
+        <span className="text-[10px] font-mono text-primary bg-primary/5 border border-primary/20 px-3 py-1 uppercase tracking-widest font-bold">Navigation Link: Stable</span>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        {/* Trajectory Canvas System */}
+        <div className="lg:col-span-6 bg-background border border-outline/10 p-8 flex flex-col justify-between space-y-6 min-h-[300px]">
+          <div className="flex justify-between items-center border-b border-outline/5 pb-4">
+            <span className="text-[9px] font-mono text-on-surface/40 uppercase tracking-widest font-black">Live Flight Trajectory Map</span>
+            <span className="text-[9px] font-mono text-primary font-bold">Zoom Scale: 1:${auxiliaryShields * 2500}km</span>
+          </div>
+
+          <div className="flex-grow flex items-center justify-center relative py-6">
+            <svg className="w-64 h-64 overflow-visible" viewBox="-100 -100 200 200">
+              <defs>
+                <radialGradient id="star-glow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor={targetSystem === 'SAGITTARIUS-A' ? '#c084fc' : '#f59e0b'} stopOpacity="1" />
+                  <stop offset="100%" stopColor={targetSystem === 'SAGITTARIUS-A' ? '#6b21a8' : '#78350f'} stopOpacity="0" />
+                </radialGradient>
+                <linearGradient id="orbit-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.8" />
+                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.1" />
+                </linearGradient>
+              </defs>
+
+              <circle cx="0" cy="0" r={targetSystem === 'SAGITTARIUS-A' ? "18" : "15"} fill="url(#star-glow)" />
+              {targetSystem === 'SAGITTARIUS-A' && (
+                <circle cx="0" cy="0" r="10" fill="#000" />
+              )}
+              
+              <circle 
+                cx="0" 
+                cy="0" 
+                r={orbitalRadius - 20} 
+                fill="none" 
+                stroke={targetSystem === 'SAGITTARIUS-A' ? '#dc2626' : '#ea580c'} 
+                strokeDasharray="4 6" 
+                strokeWidth="1.5"
+                className="opacity-40 animate-pulse" 
+              />
+
+              <path 
+                d={`M -90 90 Q 0 ${-orbitalRadius + 15} 90 90`} 
+                fill="none" 
+                stroke="url(#orbit-grad)" 
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                className="transition-all duration-500"
+              />
+
+              <motion.circle 
+                cx="0" 
+                cy={-orbitalRadius + 15} 
+                r="4.5" 
+                fill="var(--color-primary)" 
+                animate={{ scale: [1, 1.3, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              />
+
+              <text x="0" y="45" textAnchor="middle" fill="currentColor" className="text-[7px] font-mono text-on-surface/30 uppercase tracking-widest font-black">
+                {targetSystem === 'SAGITTARIUS-A' ? 'BLACK HOLE' : 'SUN ORBIT'}
+              </text>
+            </svg>
+
+            <div className="absolute top-4 left-4 font-mono text-[8px] space-y-1 text-on-surface/40 uppercase">
+              <p>Closest Approach: <span className="text-on-surface/80">{(orbitalRadius - 15).toFixed(1)}M km</span></p>
+              <p>Atmospheric Drag: <span className="text-on-surface/80">{(1.02 + warpVelocity / 24).toFixed(3)}</span></p>
+              <p>Thermal Load: <span className="text-on-surface/80">{(warpVelocity * 14.5).toFixed(1)} kW/m²</span></p>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center text-[9px] font-mono text-on-surface/30">
+            <span>FLIGHT ANGLE CALCULATION</span>
+            <span>SHIELDS INTERFERENCE: {auxiliaryShields}%</span>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="lg:col-span-6 space-y-8 flex flex-col justify-between">
+          <div className="bg-surface-variant/30 p-8 border border-outline/10 space-y-8">
+            <h5 className="text-[10px] font-bold uppercase tracking-widest text-primary italic flex items-center gap-2">
+              <Sliders className="w-3 h-3" /> Course Setup
+            </h5>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+              <div className="space-y-3">
+                <label className="text-[9px] font-mono text-on-surface/40 uppercase block">Destination System</label>
+                <select 
+                  value={targetSystem} 
+                  onChange={(e) => {
+                    setTargetSystem(e.target.value);
+                    setScanResult(`Target system updated to ${e.target.value}. Recalculation required.`);
+                  }}
+                  disabled={isNavulating}
+                  className="w-full bg-background border border-outline/20 p-3 text-xs font-mono text-on-surface focus:outline-none focus:border-primary uppercase"
+                >
+                  <option value="PROXIMA">Proxima Centauri (Alpha Sector)</option>
+                  <option value="KEPLER-186F">Kepler-186f (Biosphere Star)</option>
+                  <option value="TRAPPIST-1">Trappist-1 (Tidal Locked Belt)</option>
+                  <option value="SAGITTARIUS-A">Sagittarius A* (Supermassive Sink)</option>
+                </select>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center text-xs font-mono">
+                  <span className="text-on-surface/60">Warp Speed (c)</span>
+                  <span className="text-primary font-bold">{warpVelocity}c</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0.5" 
+                  max="9.9" 
+                  step="0.5"
+                  value={warpVelocity} 
+                  onChange={(e) => {
+                    setWarpVelocity(parseFloat(e.target.value));
+                  }}
+                  disabled={isNavulating}
+                  className="w-full h-1 bg-outline/20 accent-primary appearance-none cursor-pointer rounded"
+                />
+                <div className="flex justify-between text-[8px] font-mono text-on-surface/30">
+                  <span>0.5c</span>
+                  <span>5.0c</span>
+                  <span>9.9c</span>
+                </div>
+              </div>
+
+              <div className="space-y-4 col-span-1 sm:col-span-2">
+                <div className="flex justify-between items-center text-xs font-mono">
+                  <span className="text-on-surface/60">Thermal & Gravity Deflectors</span>
+                  <span className="text-primary font-bold">{auxiliaryShields}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="30" 
+                  max="100" 
+                  step="5"
+                  value={auxiliaryShields} 
+                  onChange={(e) => {
+                    setAuxiliaryShields(parseInt(e.target.value));
+                  }}
+                  disabled={isNavulating}
+                  className="w-full h-1 bg-outline/20 accent-primary appearance-none cursor-pointer rounded"
+                />
+                <div className="flex justify-between text-[8px] font-mono text-on-surface/30">
+                  <span>30% Minimal (Danger)</span>
+                  <span>70% Standard</span>
+                  <span>100% Maximum Coverage</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Telemetry readout */}
+            <div className="border border-outline/10 p-6 bg-background rounded-xs grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-[7.5px] font-mono text-on-surface/30 uppercase block">Distance to Point</span>
+                <p className="font-mono text-xs text-on-surface/80">{activeSys.dist}</p>
+              </div>
+              <div>
+                <span className="text-[7.5px] font-mono text-on-surface/30 uppercase block">Navigation Vector</span>
+                <p className="font-mono text-xs text-on-surface/80">{activeSys.coord}</p>
+              </div>
+              <div>
+                <span className="text-[7.5px] font-mono text-on-surface/30 uppercase block">Sector Hazard Index</span>
+                <p className="font-mono text-xs text-rose-400 font-bold">{activeSys.danger}</p>
+              </div>
+              <div>
+                <span className="text-[7.5px] font-mono text-on-surface/35 uppercase block">Orbital Gravity Pull</span>
+                <p className="font-mono text-xs text-on-surface/80">{activeSys.gravity}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {/* Feedback Output */}
+            <div className="bg-neutral-950 p-6 border border-outline/10 rounded-xs font-mono text-[10.5px]">
+              <div className="text-primary font-bold uppercase tracking-widest text-[8px] mb-2 font-black">System Flight Computation Output:</div>
+              <p className="text-on-surface/80 leading-relaxed">{scanResult}</p>
+            </div>
+
+            <button
+              onClick={handleStartChart} 
+              disabled={isNavulating}
+              className={`w-full py-5 font-black uppercase tracking-[0.25em] text-xs transition-all flex items-center justify-center gap-3 border ${
+                isNavulating 
+                  ? 'bg-transparent text-primary/40 border-primary/20 cursor-not-allowed' 
+                  : 'bg-primary text-background border-primary hover:bg-transparent hover:text-primary'
+              }`}
+            >
+              {isNavulating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Computing astrometric hyper-gates...</span>
+                </>
+              ) : (
+                <>
+                  <Activity className="w-4 h-4" />
+                  <span>Calibrate Orbit & Plot Star Path</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -713,9 +1339,9 @@ const GameRow: React.FC<GameRowProps> = ({ title, image, status, hours, lastPlay
   return (
     <div 
       onClick={onClick}
-      className="p-8 bg-background flex flex-col md:flex-row items-center gap-12 group hover:bg-white/[0.03] transition-colors cursor-pointer border-b border-white/5 last:border-b-0"
+      className="p-8 bg-background flex flex-col md:flex-row items-center gap-12 group hover:bg-on-surface/[0.03] transition-colors cursor-pointer border-b border-outline/5 last:border-b-0"
     >
-      <div className="w-full md:w-32 h-40 shrink-0 bg-neutral-900 border border-white/10 overflow-hidden relative">
+      <div className="w-full md:w-32 h-40 shrink-0 bg-surface border border-outline overflow-hidden relative font-black">
         <img 
           alt={title} 
           src={image} 
@@ -730,18 +1356,18 @@ const GameRow: React.FC<GameRowProps> = ({ title, image, status, hours, lastPlay
             }
           }}
         />
-        <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
+        <div className="absolute inset-0 bg-background/20 group-hover:bg-transparent transition-colors" />
       </div>
       
       <div className="flex-grow flex flex-col gap-4">
         <div className="flex justify-between items-start">
-          <h3 className="text-3xl font-black uppercase tracking-tighter leading-none group-hover:text-primary transition-colors">{title}</h3>
-          <button className={`transition-colors ${liked ? 'text-primary' : 'text-white/40 hover:text-primary'}`}>
+          <h3 className="text-3xl font-black uppercase tracking-tighter leading-none group-hover:text-primary transition-colors text-on-surface">{title}</h3>
+          <button className={`transition-colors ${liked ? 'text-primary' : 'text-on-surface/40 hover:text-primary'}`}>
             <Heart className={`w-6 h-6 ${liked ? 'fill-current' : ''}`} />
           </button>
         </div>
 
-        <div className="flex flex-wrap gap-8 text-[9px] font-mono uppercase tracking-[0.2em] text-white/60">
+        <div className="flex flex-wrap gap-8 text-[9px] font-mono uppercase tracking-[0.2em] text-on-surface/60">
           <div className="flex items-center gap-2 italic"><Clock className="w-3 h-3" /> {hours}</div>
           <div className="flex items-center gap-2"><RefreshCw className="w-3 h-3" /> {lastPlayed}</div>
           {status && <div className="text-primary border border-primary/20 bg-primary/5 px-2">Status: {status}</div>}
@@ -751,8 +1377,8 @@ const GameRow: React.FC<GameRowProps> = ({ title, image, status, hours, lastPlay
       <div className="w-full md:w-48">
         <div className={`w-full py-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all border text-center ${
           action === 'Play' 
-            ? 'bg-white text-black border-white group-hover:bg-primary group-hover:border-primary' 
-            : 'bg-transparent text-white border-white/20 group-hover:border-white'
+            ? 'bg-on-surface text-background border-on-surface group-hover:bg-primary group-hover:border-primary group-hover:text-background' 
+            : 'bg-transparent text-on-surface border-outline/20 group-hover:border-on-surface'
         }`}>
           {action} VIEW
         </div>
@@ -760,4 +1386,5 @@ const GameRow: React.FC<GameRowProps> = ({ title, image, status, hours, lastPlay
     </div>
   );
 }
+
 

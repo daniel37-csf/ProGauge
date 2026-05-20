@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.get('email', '').toLower() == "drd3773@gmail.com")
+      );
+    }
+
+    // Validation Blueprints
+    function isValidUser(data) {
+      return data.username is string && data.username.size() >= 3 && data.username.size() <= 32
+        && (data.get('email', '') == '' || data.email is string)
+        && (data.get('steamId', '') == '' || data.steamId is string)
+        && (data.get('avatar', '') == '' || data.avatar is string)
+        && (data.get('bio', '') == '' || data.bio is string)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdmin(data) {
+      return data.userId is string && data.role is string && data.email is string;
+    }
+
+    function isValidUsernameMap(data) {
+      return data.userId is string && data.userId.size() > 0;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+
+    // Admins Collection
+    match /admins/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if (isOwner(userId) && request.auth.token.get('email', '').toLower() == "drd3773@gmail.com" && isValidAdmin(incoming()) && incoming().userId == userId)
+                    || (isAdmin() && isValidAdmin(incoming()) && incoming().userId == userId);
+      
+      allow update: if isAdmin() && isValidAdmin(incoming()) && incoming().userId == userId;
+      allow delete: if isAdmin() && userId != request.auth.uid;
+    }
+
+    // Username Uniqueness Map
+    match /usernames/{username} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+  }
+}
